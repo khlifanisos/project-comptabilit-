@@ -1,0 +1,100 @@
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #F0F4F8;
+  color: #0F172A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+:root {
+  --primary: #1565C0;
+  --primary-dark: #0D47A1;
+  --secondary: #0891B2;
+  --accent: #EA580C;
+  --success: #16A34A;
+  --warning: #EA580C;
+  --danger: #DC2626;
+  --bg: #F0F4F8;
+  --sidebar-width: 248px;
+  --topbar-height: 64px;
+  --radius: 10px;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.06), 0 1px 3px rgba(15,23,42,0.08);
+  --shadow-md: 0 4px 16px rgba(15,23,42,0.1);
+  --shadow-lg: 0 8px 32px rgba(15,23,42,0.14);
+}
+
+/* Neutralise browser find-in-page yellow marks */
+mark { background: transparent; color: inherit; }
+::highlight(find-in-page) { background-color: transparent; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* Page fade-in */
+.fade-in { animation: fadeIn 0.25s ease-out; will-change: opacity, transform; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Page header — consistent section titles */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.page-header__title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0F172A;
+  letter-spacing: -0.01em;
+}
+.page-header__subtitle {
+  font-size: 0.8rem;
+  color: #64748B;
+  margin-top: 2px;
+}
+
+/* Table zebra stripe */
+.table-row-even { background: #FAFBFC; }
+
+/* Card hover util */
+.card-hover {
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-md) !important;
+  transform: translateY(-2px);
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(255,255,255,0.88);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.6);
+}
+
+/* Number display (large stats) */
+.stat-number {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}

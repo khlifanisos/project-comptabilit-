@@ -1,0 +1,39 @@
+# Environment variables (never commit API keys)
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Laravel
+backend/storage/logs/
+backend/storage/framework/cache/
+backend/storage/framework/sessions/
+backend/storage/framework/views/
+backend/bootstrap/cache/
+
+# Local debugging only — dumps full server config, never commit
+phpinfo.php
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# One-off local debug scripts (not part of the app; keep on disk only)
+backend/tmp_check.php
+backend/tmp_upload_test.php
+backend/test_storage.php
+
+# Uploads (user data, not source code)
+backend/public/uploads/avatars/
