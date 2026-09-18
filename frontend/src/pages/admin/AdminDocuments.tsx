@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Box, Typography, Card, CardContent, TextField, InputAdornment,
   CircularProgress, Dialog, DialogTitle,
   DialogContent, DialogActions, Button, Divider,
   FormControl, InputLabel, Select, MenuItem,
   Checkbox, FormControlLabel, LinearProgress, Chip,
+  Avatar, IconButton, Tooltip,
 } from '@mui/material'
 import SearchIcon      from '@mui/icons-material/Search'
 import FolderOpenIcon  from '@mui/icons-material/FolderOpen'
 import TableChartIcon  from '@mui/icons-material/TableChart'
+import ArrowBackIcon   from '@mui/icons-material/ArrowBack'
 import toast from 'react-hot-toast'
 import api from '../../api/axios'
 import DocumentsTable from '../../components/admin/DocumentsTable'
@@ -16,8 +18,14 @@ import { downloadDocExcel, writeFallbackExcel } from '../../utils/documentExcel'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import {
   DocRow, DocStatut, DOC_SOURCES, SOURCE_API, FILE_SUB, TYPE_LABEL, STATUS_MAP,
-  resolveStatut, resolveFichier, resolveClient, resolveDate,
+  resolveStatut, resolveFichier, resolveClient, resolveDate, getClientId,
 } from '../../utils/documentSources'
+
+interface ClientGroup {
+  key:   string
+  label: string
+  rows:  DocRow[]
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -143,6 +151,31 @@ export default function AdminDocuments() {
 
   const pending = allDocs.filter(r => r.statut === 'en_attente').length
 
+  // ── Group by client ──────────────────────────────────────────────────────
+
+  const clientGroups: ClientGroup[] = useMemo(() => {
+    const map = new Map<string, ClientGroup>()
+    filtered.forEach(r => {
+      const id  = getClientId(r.rawItem)
+      const key = id !== null ? `c${id}` : `n-${r.client}`
+      if (!map.has(key)) map.set(key, { key, label: r.client, rows: [] })
+      map.get(key)!.rows.push(r)
+    })
+    return Array.from(map.values())
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }))
+  }, [filtered])
+
+  const [selectedClient, setSelectedClient] = useState<string | null>(null)
+  const selectedGroup = clientGroups.find(g => g.key === selectedClient) ?? null
+
+  // If the selected client disappears from the filtered set (search/status
+  // filter changed, or it had no more matching docs), fall back to the grid.
+  useEffect(() => {
+    if (selectedClient && !clientGroups.some(g => g.key === selectedClient)) {
+      setSelectedClient(null)
+    }
+  }, [clientGroups, selectedClient])
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -213,12 +246,64 @@ export default function AdminDocuments() {
 
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
-          ) : (
+          ) : clientGroups.length === 0 ? (
             <DocumentsTable
-              rows={filtered}
+              rows={[]}
               updateRow={updateRow}
               emptyMessage={search ? 'Aucun résultat.' : 'Aucun document enregistré.'}
             />
+          ) : selectedGroup === null ? (
+            // ── Row of client cards ──────────────────────────────────────────
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' },
+              gap: 2,
+            }}>
+              {clientGroups.map(group => {
+                const groupPending = group.rows.filter(r => r.statut === 'en_attente').length
+                return (
+                  <Card key={group.key}
+                    onClick={() => setSelectedClient(group.key)}
+                    sx={{
+                      borderRadius: 3, cursor: 'pointer', transition: 'all .15s',
+                      boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+                      '&:hover': { boxShadow: '0 6px 20px rgba(21,101,192,0.15)', transform: 'translateY(-2px)' },
+                    }}>
+                    <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 2.5 }}>
+                      <Avatar sx={{ width: 40, height: 40, bgcolor: '#1565C0', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+                        {group.label.charAt(0).toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography fontWeight={700} fontSize={14} noWrap>{group.label}</Typography>
+                        <Typography fontSize={12} color="text.secondary">
+                          {group.rows.length} document{group.rows.length > 1 ? 's' : ''}
+                        </Typography>
+                      </Box>
+                      {groupPending > 0 && (
+                        <Chip label={groupPending} size="small"
+                          sx={{ bgcolor: '#FFF3E0', color: '#E65100', fontWeight: 700, fontSize: 11, flexShrink: 0 }} />
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </Box>
+          ) : (
+            // ── Drill-down: one client's documents ──────────────────────────
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                <Tooltip title="Retour à la liste des clients">
+                  <IconButton size="small" onClick={() => setSelectedClient(null)}>
+                    <ArrowBackIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Avatar sx={{ width: 30, height: 30, bgcolor: '#1565C0', fontSize: 13, fontWeight: 700 }}>
+                  {selectedGroup.label.charAt(0).toUpperCase()}
+                </Avatar>
+                <Typography fontWeight={700} fontSize={15}>{selectedGroup.label}</Typography>
+              </Box>
+              <DocumentsTable rows={selectedGroup.rows} updateRow={updateRow} minWidth={560} />
+            </Box>
           )}
         </CardContent>
       </Card>
