@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Grid, Typography, Box, Card, CardContent, Chip,
   Table, TableBody, TableCell, TableHead, TableRow,
-  LinearProgress, Button, CircularProgress
+  LinearProgress, Button, CircularProgress, useTheme
 } from '@mui/material'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
@@ -15,6 +15,7 @@ import {
   ResponsiveContainer, Legend
 } from 'recharts'
 import StatCard from '../../components/common/StatCard'
+import Reveal from '../../components/common/Reveal'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCurrency } from '../../contexts/CurrencyContext'
@@ -47,6 +48,11 @@ export default function Dashboard() {
   const { user } = useAuth()
   const { devise } = useCurrency()
   const navigate  = useNavigate()
+  const theme     = useTheme()
+  const isDark    = theme.palette.mode === 'dark'
+  const axisColor = theme.palette.text.secondary
+  const gridColor = theme.palette.divider
+  const hoverRowBg = isDark ? 'rgba(255,255,255,0.04)' : '#f8f9ff'
 
   const [stats, setStats]         = useState({ ventes: 0, achats: 0, solde: 0, nbFactures: 0, nbEnAttente: 0 })
   const [recentInvoices, setRecent] = useState<any[]>([])
@@ -113,7 +119,7 @@ export default function Dashboard() {
     <Box className="fade-in">
       <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 18, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 18, md: 22 }}>
             Bonjour, {user?.nom} 👋
           </Typography>
           <Typography color="text.secondary" fontSize={14}>
@@ -121,28 +127,28 @@ export default function Dashboard() {
           </Typography>
         </Box>
         <Chip label={new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-          sx={{ bgcolor: '#e3f0ff', color: '#1565C0', fontWeight: 600, fontSize: { xs: 11, sm: 13 } }} />
+          sx={{ bgcolor: isDark ? 'rgba(21,101,192,0.2)' : '#e3f0ff', color: isDark ? '#64B5F6' : '#1565C0', fontWeight: 600, fontSize: { xs: 11, sm: 13 } }} />
       </Box>
 
       {/* Stat cards */}
       <Grid container spacing={2.5} mb={3}>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Total ventes"
+          <StatCard delay={0} title="Total ventes"
             value={loading ? '…' : `${stats.ventes.toLocaleString('fr-FR')} ${devise}`}
             icon={<TrendingUpIcon />} color="#1565C0" subtitle="Toutes factures" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Total achats"
+          <StatCard delay={70} title="Total achats"
             value={loading ? '…' : `${stats.achats.toLocaleString('fr-FR')} ${devise}`}
             icon={<ShoppingCartIcon />} color="#FF6F00" subtitle="Toutes factures" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Solde bancaire"
+          <StatCard delay={140} title="Solde bancaire"
             value={loading ? '…' : `${stats.solde.toLocaleString('fr-FR')} ${devise}`}
             icon={<AccountBalanceWalletIcon />} color="#2E7D32" subtitle="Dernier relevé" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Factures"
+          <StatCard delay={210} title="Factures"
             value={loading ? '…' : String(stats.nbFactures)}
             icon={<ReceiptLongIcon />} color="#7B1FA2"
             subtitle={`${stats.nbEnAttente} en attente`} />
@@ -152,11 +158,12 @@ export default function Dashboard() {
       <Grid container spacing={2.5} mb={3}>
         {/* Chart */}
         <Grid item xs={12} lg={8}>
+          <Reveal observe={false} delay={100}>
           <Card sx={{ borderRadius: 3, height: '100%' }}>
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                 <Typography fontWeight={700} fontSize={16}>Évolution financière</Typography>
-                <Chip label="6 derniers mois" size="small" sx={{ bgcolor: '#e3f0ff', color: '#1565C0' }} />
+                <Chip label="6 derniers mois" size="small" sx={{ bgcolor: isDark ? 'rgba(21,101,192,0.2)' : '#e3f0ff', color: isDark ? '#64B5F6' : '#1565C0' }} />
               </Box>
               <ResponsiveContainer width="100%" height={240}>
                 <AreaChart data={chartData}>
@@ -170,21 +177,27 @@ export default function Dashboard() {
                       <stop offset="95%" stopColor="#FF6F00" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v) => `${Number(v).toLocaleString('fr-FR')} ${devise}`} />
-                  <Legend />
-                  <Area type="monotone" dataKey="ventes" name="Ventes" stroke="#1565C0" fill="url(#ventes)" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="achats" name="Achats" stroke="#FF6F00" fill="url(#achats)" strokeWidth={2.5} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="mois" tick={{ fontSize: 12, fill: axisColor }} />
+                  <YAxis tick={{ fontSize: 12, fill: axisColor }} />
+                  <Tooltip
+                    formatter={(v) => `${Number(v).toLocaleString('fr-FR')} ${devise}`}
+                    contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${gridColor}`, borderRadius: 8, color: theme.palette.text.primary }} />
+                  <Legend wrapperStyle={{ color: axisColor }} />
+                  <Area type="monotone" dataKey="ventes" name="Ventes" stroke="#1565C0" fill="url(#ventes)" strokeWidth={2.5}
+                    animationDuration={900} animationEasing="ease-out" />
+                  <Area type="monotone" dataKey="achats" name="Achats" stroke="#FF6F00" fill="url(#achats)" strokeWidth={2.5}
+                    animationDuration={900} animationEasing="ease-out" animationBegin={150} />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          </Reveal>
         </Grid>
 
         {/* Échéances réelles */}
         <Grid item xs={12} lg={4}>
+          <Reveal observe={false} delay={180}>
           <Card sx={{ borderRadius: 3, height: '100%' }}>
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -217,10 +230,12 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+          </Reveal>
         </Grid>
       </Grid>
 
       {/* Recent invoices */}
+      <Reveal observe={false} delay={260}>
       <Card sx={{ borderRadius: 3 }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5 }}>
@@ -250,7 +265,7 @@ export default function Dashboard() {
                 </TableHead>
                 <TableBody>
                   {recentInvoices.map((inv) => (
-                    <TableRow key={inv.id} sx={{ '&:hover': { bgcolor: '#f8f9ff' } }}>
+                    <TableRow key={inv.id} sx={{ '&:hover': { bgcolor: hoverRowBg } }}>
                       <TableCell><Typography fontWeight={700} fontSize={13}>{inv.numero ?? `VTE-${inv.id}`}</Typography></TableCell>
                       <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{inv.client_nom ?? '—'}</TableCell>
                       <TableCell>{new Date(inv.date).toLocaleDateString('fr-FR')}</TableCell>
@@ -270,6 +285,7 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+      </Reveal>
     </Box>
   )
 }

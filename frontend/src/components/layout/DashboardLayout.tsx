@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: Props) {
   const showFloating = !HIDE_FLOATING_ON.includes(location.pathname)
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f0f2f5' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default', transition: 'background-color 0.3s ease' }}>
       <Sidebar
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}

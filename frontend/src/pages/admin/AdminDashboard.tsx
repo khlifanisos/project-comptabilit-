@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Box, Typography, Card, CardContent, Grid, Chip, Avatar, Button, CircularProgress
+  Box, Typography, Card, CardContent, Grid, Chip, Avatar, Button, CircularProgress, useTheme
 } from '@mui/material'
 import PeopleIcon from '@mui/icons-material/People'
 import FolderIcon from '@mui/icons-material/Folder'
@@ -13,6 +13,7 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import StatCard from '../../components/common/StatCard'
+import Reveal from '../../components/common/Reveal'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import api from '../../api/axios'
@@ -40,6 +41,10 @@ export default function AdminDashboard() {
   const { user } = useAuth()
   const { devise } = useCurrency()
   const navigate = useNavigate()
+  const theme     = useTheme()
+  const isDark    = theme.palette.mode === 'dark'
+  const axisColor = theme.palette.text.secondary
+  const gridColor = theme.palette.divider
   const [pending, setPending]         = useState<PendingClient[]>([])
   const [loadingPending, setLoadingPending] = useState(true)
   const [actioning, setActioning]     = useState<number | null>(null)
@@ -97,7 +102,7 @@ export default function AdminDashboard() {
             <AdminPanelSettingsIcon sx={{ color: 'white', fontSize: { xs: 22, md: 26 } }} />
           </Box>
           <Box>
-            <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+            <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
               Console d'administration
             </Typography>
             <Typography color="text.secondary" fontSize={13}>
@@ -110,39 +115,42 @@ export default function AdminDashboard() {
 
       <Grid container spacing={2.5} mb={3}>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Clients totaux" value="52" icon={<PeopleIcon />} color="#1565C0" trend={15} subtitle="Ce mois" />
+          <StatCard delay={0} title="Clients totaux" value="52" icon={<PeopleIcon />} color="#1565C0" trend={15} subtitle="Ce mois" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Documents traités" value="339" icon={<FolderIcon />} color="#FF6F00" trend={22} subtitle="Ce mois" />
+          <StatCard delay={70} title="Documents traités" value="339" icon={<FolderIcon />} color="#FF6F00" trend={22} subtitle="Ce mois" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Factures totales" value="1 248" icon={<ReceiptLongIcon />} color="#2E7D32" trend={18} subtitle="Ce mois" />
+          <StatCard delay={140} title="Factures totales" value="1 248" icon={<ReceiptLongIcon />} color="#2E7D32" trend={18} subtitle="Ce mois" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard title="Volume financier" value={`4,8M ${devise}`} icon={<TrendingUpIcon />} color="#7B1FA2" trend={31} subtitle="Ce mois" />
+          <StatCard delay={210} title="Volume financier" value={`4,8M ${devise}`} icon={<TrendingUpIcon />} color="#7B1FA2" trend={31} subtitle="Ce mois" />
         </Grid>
       </Grid>
 
       <Grid container spacing={2.5} mb={3}>
         <Grid item xs={12} lg={8}>
+          <Reveal observe={false} delay={100}>
           <Card sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 3 }}>
               <Typography fontWeight={700} fontSize={16} mb={3}>Activité mensuelle</Typography>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="clients" name="Nouveaux clients" fill="#1565C0" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="documents" name="Documents" fill="#FF6F00" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="mois" tick={{ fontSize: 12, fill: axisColor }} />
+                  <YAxis tick={{ fontSize: 12, fill: axisColor }} />
+                  <Tooltip contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${gridColor}`, borderRadius: 8, color: theme.palette.text.primary }} />
+                  <Legend wrapperStyle={{ color: axisColor }} />
+                  <Bar dataKey="clients" name="Nouveaux clients" fill="#1565C0" radius={[4, 4, 0, 0]} animationDuration={900} animationEasing="ease-out" />
+                  <Bar dataKey="documents" name="Documents" fill="#FF6F00" radius={[4, 4, 0, 0]} animationDuration={900} animationEasing="ease-out" animationBegin={150} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          </Reveal>
         </Grid>
         <Grid item xs={12} lg={4}>
+          <Reveal observe={false} delay={180}>
           <Card sx={{ borderRadius: 3, height: '100%' }}>
             <CardContent sx={{ p: 3 }}>
               <Typography fontWeight={700} fontSize={16} mb={2.5}>Répartition des modules</Typography>
@@ -157,7 +165,7 @@ export default function AdminDashboard() {
                     <Typography fontSize={13} fontWeight={600}>{item.label}</Typography>
                     <Typography fontSize={13} fontWeight={700} color={item.color}>{item.count}</Typography>
                   </Box>
-                  <Box sx={{ height: 6, borderRadius: 3, bgcolor: '#f0f2f5', overflow: 'hidden' }}>
+                  <Box sx={{ height: 6, borderRadius: 3, bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#f0f2f5', overflow: 'hidden' }}>
                     <Box sx={{ height: '100%', width: `${(item.count / 500) * 100}%`,
                       bgcolor: item.color, borderRadius: 3, transition: 'width 1s' }} />
                   </Box>
@@ -165,10 +173,12 @@ export default function AdminDashboard() {
               ))}
             </CardContent>
           </Card>
+          </Reveal>
         </Grid>
       </Grid>
 
       {/* Pending client requests */}
+      <Reveal observe={false} delay={260}>
       <Card sx={{ borderRadius: 3 }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
@@ -200,8 +210,10 @@ export default function AdminDashboard() {
                 <Box key={client.id} sx={{
                   display: 'flex', alignItems: 'center', gap: 2,
                   p: 2, borderRadius: 2,
-                  border: `1px solid ${isAccepted ? '#A5D6A7' : '#FFF3E0'}`,
-                  bgcolor: isAccepted ? '#F1F8E9' : '#FFFBF5',
+                  border: `1px solid ${isAccepted ? '#A5D6A7' : (isDark ? 'rgba(255,111,0,0.35)' : '#FFF3E0')}`,
+                  bgcolor: isAccepted
+                    ? (isDark ? 'rgba(46,125,50,0.14)' : '#F1F8E9')
+                    : (isDark ? 'rgba(255,111,0,0.08)' : '#FFFBF5'),
                   flexWrap: { xs: 'wrap', sm: 'nowrap' },
                   transition: 'background 0.3s, border-color 0.3s',
                 }}>
@@ -270,6 +282,7 @@ export default function AdminDashboard() {
           )}
         </CardContent>
       </Card>
+      </Reveal>
     </Box>
   )
 }

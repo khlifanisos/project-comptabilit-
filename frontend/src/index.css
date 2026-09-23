@@ -5,12 +5,13 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #F0F4F8;
-  color: #0F172A;
+  /* Background/color are owned by MUI's CssBaseline (theme.palette.background.default /
+     text.primary), which reacts to the light/dark mode toggle — no static value here. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-size: 14px;
   line-height: 1.5;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 :root {
@@ -28,6 +29,13 @@ body {
   --shadow-sm: 0 1px 2px rgba(15,23,42,0.06), 0 1px 3px rgba(15,23,42,0.08);
   --shadow-md: 0 4px 16px rgba(15,23,42,0.1);
   --shadow-lg: 0 8px 32px rgba(15,23,42,0.14);
+}
+
+:root[data-theme="dark"] {
+  --bg: #0B1220;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.45);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.55);
 }
 
 /* Neutralise browser find-in-page yellow marks */
@@ -97,4 +105,83 @@ mark { background: transparent; color: inherit; }
 .stat-number {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
+}
+
+/* ── Shared reveal / motion utilities (landing page + app dashboards) ──── */
+
+/* Scroll/mount-reveal: fade + slide up, triggered via the useReveal hook */
+.reveal-up {
+  opacity: 0;
+  transform: translateY(28px);
+}
+.reveal-up.is-visible {
+  animation: revealUp 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes revealUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Gentle floating motion for accent cards */
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.float-y       { animation: floatY 3.8s ease-in-out infinite; }
+.float-y-delay { animation: floatY 4.4s ease-in-out infinite; animation-delay: 1s; }
+
+/* Soft ambient drift for background glow blobs */
+@keyframes driftBlob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-16px, 14px) scale(1.06); }
+}
+.drift-blob { animation: driftBlob 9s ease-in-out infinite; }
+
+/* ── Sidebar / navigation chrome ─────────────────────────────────────── */
+
+/* Nav items cascade in once when the sidebar first mounts */
+@keyframes navItemIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.nav-item-in { animation: navItemIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Slow ambient pulse behind the logo mark */
+@keyframes logoPulse {
+  0%, 100% { box-shadow: 0 2px 10px rgba(59,130,246,0.4), 0 0 0 0 rgba(59,130,246,0.35); }
+  50%      { box-shadow: 0 2px 10px rgba(59,130,246,0.4), 0 0 0 8px rgba(59,130,246,0); }
+}
+.logo-pulse { animation: logoPulse 2.6s ease-out infinite; }
+
+/* Unread badge draws attention with a light pulse */
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+.badge-pulse { animation: badgePulse 1.8s ease-in-out infinite; }
+
+/* Live status dot */
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74,222,128,0.55); }
+  50%      { opacity: 0.75; box-shadow: 0 0 0 4px rgba(74,222,128,0); }
+}
+.dot-pulse { animation: dotPulse 2s ease-in-out infinite; }
+
+/* Slow drifting sidebar background glow */
+@keyframes sidebarGlow {
+  0%, 100% { transform: translate(0, 0); opacity: 0.5; }
+  50%      { transform: translate(10px, -18px); opacity: 0.8; }
+}
+.sidebar-glow { animation: sidebarGlow 10s ease-in-out infinite; }
+
+/* Slow shimmer along the topbar's bottom accent line */
+@keyframes topbarShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-up { opacity: 1; transform: none; animation: none; }
+  .float-y, .float-y-delay, .drift-blob,
+  .nav-item-in, .logo-pulse, .badge-pulse, .dot-pulse, .sidebar-glow { animation: none; }
+  .nav-item-in { opacity: 1; transform: none; }
 }

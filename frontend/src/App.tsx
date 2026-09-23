@@ -1,8 +1,10 @@
+import { useMemo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
 import { Toaster } from 'react-hot-toast'
-import theme from './theme'
+import { getTheme } from './theme'
+import { ThemeModeProvider, useThemeMode } from './contexts/ThemeModeContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -44,7 +46,10 @@ function AuditPage() {
   return realRole === 'admin' ? <AdminAudit /> : <AuditIntelligent />
 }
 
-export default function App() {
+function ThemedApp() {
+  const { mode } = useThemeMode()
+  const theme = useMemo(() => getTheme(mode), [mode])
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -166,5 +171,13 @@ export default function App() {
           toastOptions={{ style: { fontFamily: 'Inter', fontWeight: 600, borderRadius: 12 } }} />
       </AuthProvider>
     </ThemeProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <ThemeModeProvider>
+      <ThemedApp />
+    </ThemeModeProvider>
   )
 }

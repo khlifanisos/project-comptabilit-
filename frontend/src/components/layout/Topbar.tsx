@@ -9,12 +9,15 @@ import MenuIcon      from '@mui/icons-material/Menu'
 import LogoutIcon    from '@mui/icons-material/Logout'
 import PersonIcon    from '@mui/icons-material/Person'
 import SettingsIcon  from '@mui/icons-material/Settings'
+import DarkModeIcon   from '@mui/icons-material/DarkModeRounded'
+import LightModeIcon  from '@mui/icons-material/LightModeRounded'
 import NotificationBell  from './NotificationBell'
 import RoleSwitcherModal from './RoleSwitcherModal'
 import CurrencyBadge     from './CurrencyBadge'
 import { useAuth }        from '../../contexts/AuthContext'
 import { useNavigate }    from 'react-router-dom'
 import { useProfilePhoto } from '../../utils/useProfilePhoto'
+import { useThemeMode }    from '../../contexts/ThemeModeContext'
 
 // Search bar hidden for now — flip back to true to restore it.
 const SHOW_SEARCH = false
@@ -28,6 +31,8 @@ export default function Topbar({ onMenuClick }: Props) {
   const theme    = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const isPhone  = useMediaQuery(theme.breakpoints.down('sm'))
+  const { mode, toggleMode } = useThemeMode()
+  const chromeBg = mode === 'dark' ? '#070C16' : '#0A1628'
 
   const [anchorEl, setAnchorEl]       = useState<null | HTMLElement>(null)
   const [searchOpen, setSearchOpen]   = useState(false)
@@ -46,9 +51,18 @@ export default function Topbar({ onMenuClick }: Props) {
       sx={{
         left:  isMobile ? 0 : 248,
         width: isMobile ? '100%' : 'calc(100% - 248px)',
-        bgcolor: '#0A1628',
+        bgcolor: chromeBg,
         borderBottom: '1px solid rgba(255,255,255,0.07)',
         zIndex: 99,
+        transition: 'background-color 0.3s ease',
+        overflow: 'hidden',
+        '&::after': {
+          content: '""',
+          position: 'absolute', left: 0, right: 0, bottom: -1, height: 2,
+          background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.55), transparent)',
+          backgroundSize: '200% 100%',
+          animation: 'topbarShimmer 6s ease-in-out infinite',
+        },
       }}>
       <Toolbar sx={{ gap: 1, minHeight: { xs: 58, md: 64 }, px: { xs: 1.5, md: 2.5 } }}>
 
@@ -56,7 +70,11 @@ export default function Topbar({ onMenuClick }: Props) {
         {isMobile && (
           <IconButton
             onClick={onMenuClick}
-            sx={{ color: 'rgba(255,255,255,0.8)', mr: 0.5, p: 1 }}>
+            sx={{
+              color: 'rgba(255,255,255,0.8)', mr: 0.5, p: 1,
+              transition: 'transform 0.2s ease, background-color 0.2s ease',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)', transform: 'scale(1.08)' },
+            }}>
             <MenuIcon />
           </IconButton>
         )}
@@ -111,6 +129,25 @@ export default function Topbar({ onMenuClick }: Props) {
         {/* Role switcher — hide on phone */}
         {!isPhone && <RoleSwitcherModal />}
 
+        {/* Dark / light mode toggle */}
+        <Tooltip title={mode === 'dark' ? 'Mode clair' : 'Mode sombre'}>
+          <IconButton
+            onClick={toggleMode}
+            sx={{
+              color: 'rgba(255,255,255,0.75)', p: 1,
+              transition: 'transform 0.2s ease, background-color 0.2s ease, color 0.2s ease',
+              '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.08)', transform: 'scale(1.08)' },
+            }}>
+            <Box sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              transform: mode === 'dark' ? 'rotate(0deg)' : 'rotate(180deg)',
+            }}>
+              {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+            </Box>
+          </IconButton>
+        </Tooltip>
+
         {/* Notifications */}
         <NotificationBell />
 
@@ -123,14 +160,18 @@ export default function Topbar({ onMenuClick }: Props) {
               gap: { xs: 0, md: 1.2 },
               cursor: 'pointer', borderRadius: 20,
               px: { xs: 0.5, md: 1.5 }, py: 0.6,
+              transition: 'background-color 0.2s ease',
               '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+              '&:hover .topbar-avatar': { boxShadow: '0 0 0 2px rgba(96,165,250,0.55)' },
             }}>
             <Avatar
+              className="topbar-avatar"
               src={photo ?? undefined}
               sx={{
                 width: { xs: 32, md: 34 }, height: { xs: 32, md: 34 },
                 background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)',
                 fontSize: 14, fontWeight: 700,
+                transition: 'box-shadow 0.2s ease',
               }}>
               {!photo && user?.nom?.charAt(0).toUpperCase()}
             </Avatar>
