@@ -12,8 +12,16 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import toast from 'react-hot-toast'
 import api from '../../api/axios'
 import { useCurrency } from '../../contexts/CurrencyContext'
+
+interface AiSummary {
+  synthese: string
+  actions_prioritaires: string[]
+  cached: boolean
+}
 
 interface Anomalie {
   type: 'error' | 'warning' | 'info'
@@ -45,6 +53,7 @@ interface AuditResult {
     nb_declarations: number
     nb_releves: number
     nb_leasing?: number
+    cout_penalites_estime?: number
   }
 }
 
@@ -82,6 +91,7 @@ const DEMO_AUDIT: AuditResult = {
     nb_declarations:        12,
     nb_releves:              0,
     nb_leasing:              3,
+    cout_penalites_estime: 187.50,
   },
 }
 
@@ -139,6 +149,20 @@ export default function AuditIntelligent() {
   const [isDemo, setIsDemo]     = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [, tick] = useState(0)
+
+  // Copilote IA — appelé uniquement à la demande (jamais dans le polling)
+  const [aiSummary, setAiSummary] = useState<AiSummary | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+
+  const generateAiSummary = useCallback((force = false) => {
+    setAiLoading(true)
+    api.get('/audit/ai-summary', { params: force ? { force: 1 } : {} })
+      .then((r: { data: AiSummary }) => setAiSummary(r.data))
+      .catch((err: any) => {
+        toast.error(err?.response?.data?.message ?? "Impossible de générer l'analyse IA pour le moment.")
+      })
+      .finally(() => setAiLoading(false))
+  }, [])
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -269,6 +293,13 @@ export default function AuditIntelligent() {
                   { label: 'Déclarations',     value: audit.stats.nb_declarations, color: '#7B1FA2' },
                   { label: 'Relevés bancaires',value: audit.stats.nb_releves,      color: '#0288D1' },
                   { label: 'Anomalies',        value: audit.anomalies.length,      color: audit.anomalies.length > 0 ? '#C62828' : '#2E7D32' },
+                  ...(audit.stats.cout_penalites_estime
+                    ? [{
+                        label: 'Pénalités estimées (CDPF)',
+                        value: `${Number(audit.stats.cout_penalites_estime).toLocaleString('fr-FR')} ${devise}`,
+                        color: '#C62828',
+                      }]
+                    : []),
                 ].map((s) => (
                   <Grid item xs={6} sm={4} key={s.label}>
                     <Box sx={{ p: 1.8, borderRadius: 2, bgcolor: `${s.color}08`, border: `1px solid ${s.color}20` }}>
@@ -388,6 +419,57 @@ export default function AuditIntelligent() {
                     </Box>
                   ))}
                 </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Copilote IA — généré à la demande uniquement */}
+        <Grid item xs={12}>
+          <Card sx={{ borderRadius: 3, border: '1px solid #E1BEE7' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: aiSummary ? 2 : 0, flexWrap: 'wrap' }}>
+                <AutoAwesomeIcon sx={{ color: '#7B1FA2', fontSize: 21 }} />
+                <Typography fontWeight={700} fontSize={16} color="#1a1a2e">Copilote IA</Typography>
+                {aiSummary?.cached && (
+                  <Chip label="Résultat en cache (15 min)" size="small"
+                    sx={{ bgcolor: '#F3E5F5', color: '#7B1FA2', fontWeight: 600, fontSize: 10.5 }} />
+                )}
+                <Button
+                  size="small" startIcon={aiLoading ? <CircularProgress size={14} color="inherit" /> : <AutoAwesomeIcon />}
+                  onClick={() => generateAiSummary(!!aiSummary)}
+                  disabled={aiLoading}
+                  sx={{ ml: 'auto', textTransform: 'none', fontWeight: 700, borderRadius: 2,
+                    bgcolor: '#7B1FA2', color: 'white', '&:hover': { bgcolor: '#6A1B9A' } }}
+                  variant="contained"
+                >
+                  {aiLoading ? 'Analyse en cours…' : aiSummary ? 'Régénérer' : 'Générer une analyse IA'}
+                </Button>
+              </Box>
+              {!aiSummary && !aiLoading && (
+                <Typography fontSize={12.5} color="text.secondary">
+                  Obtenez une synthèse en langage naturel et des actions prioritaires générées par IA à partir de cet audit (non actualisé automatiquement, pour préserver le quota).
+                </Typography>
+              )}
+              {aiSummary && (
+                <Box>
+                  <Typography fontSize={13.5} color="#4A148C" sx={{ mb: 1.5, lineHeight: 1.6 }}>
+                    {aiSummary.synthese}
+                  </Typography>
+                  {aiSummary.actions_prioritaires.length > 0 && (
+                    <List disablePadding>
+                      {aiSummary.actions_prioritaires.map((a, i) => (
+                        <ListItem key={i} disablePadding sx={{ py: 0.5, alignItems: 'flex-start' }}>
+                          <ListItemIcon sx={{ minWidth: 26, mt: 0.3 }}>
+                            <Chip label={i + 1} size="small"
+                              sx={{ height: 18, width: 18, fontSize: 10.5, fontWeight: 700, bgcolor: '#F3E5F5', color: '#7B1FA2' }} />
+                          </ListItemIcon>
+                          <ListItemText primary={a} primaryTypographyProps={{ fontSize: 13 }} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  )}
+                </Box>
               )}
             </CardContent>
           </Card>

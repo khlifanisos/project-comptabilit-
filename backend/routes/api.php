@@ -130,6 +130,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Audit intelligent
     Route::get('/audit', [AuditController::class, 'index']);
+    Route::get('/audit/ai-summary', [AuditController::class, 'aiSummary']);
 
     // Textes et lois (admin)
     Route::get('/textes-lois',              [TexteLoiController::class, 'index']);

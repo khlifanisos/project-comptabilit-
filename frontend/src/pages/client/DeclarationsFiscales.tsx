@@ -70,6 +70,19 @@ function daysUntil(dateStr: string) {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000)
 }
 
+/**
+ * Prochaine occurrence du jour légal tunisien (ex: le 21 de chaque mois pour
+ * la télédéclaration TVA/IS) à partir d'aujourd'hui, au format YYYY-MM-DD.
+ * Utilisé comme suggestion — le champ reste modifiable par l'utilisateur.
+ */
+function nextLegalDeadline(day: number): string {
+  const now = new Date()
+  const year  = now.getFullYear()
+  const month = now.getDate() <= day ? now.getMonth() : now.getMonth() + 1
+  const d = new Date(year, month, day)
+  return d.toISOString().slice(0, 10)
+}
+
 const emptyForm = {
   type: 'TVA', periode: '', date_limite: '', montant: '', statut: 'a_declarer', notes: '',
 }
@@ -689,6 +702,20 @@ export default function DeclarationsFiscales() {
                 value={form.date_limite} error={!!errors.date_limite} helperText={errors.date_limite}
                 onChange={e => setForm(f => ({ ...f, date_limite: e.target.value }))} />
             </Grid>
+            {(form.type === 'TVA' || form.type === 'IS') && (
+              <Grid item xs={12}>
+                <Button
+                  size="small" variant="text"
+                  onClick={() => setForm(f => ({ ...f, date_limite: nextLegalDeadline(21) }))}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12.5, p: 0.5 }}
+                >
+                  Utiliser la prochaine échéance légale (le 21 — télédéclaration DGI)
+                </Button>
+                <Typography fontSize={11} color="text.secondary" sx={{ pl: 0.5 }}>
+                  Dépôt papier (non-télédéclarant) : dernier délai le 28 du mois.
+                </Typography>
+              </Grid>
+            )}
             {form.date_limite && (() => {
               const isPast  = new Date(form.date_limite) < new Date()
               const preview = isPast ? statusMap.en_retard : statusMap.a_declarer

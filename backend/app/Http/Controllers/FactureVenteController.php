@@ -127,6 +127,7 @@ class FactureVenteController extends Controller
 
         $facture->update($request->only([
             'numero', 'client_nom', 'date', 'echeance', 'montant_ht', 'tva', 'montant_ttc', 'statut_reglement', 'notes',
+            'facture_electronique',
         ]));
 
         NotificationController::sendAndNotify(

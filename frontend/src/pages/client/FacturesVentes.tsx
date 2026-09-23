@@ -31,6 +31,7 @@ interface FactureVente {
   montant_ttc: number
   statut_reglement: string
   fichier: string | null
+  facture_electronique: boolean | null
   client?: { nom: string; email: string }
 }
 
@@ -103,7 +104,7 @@ export default function FacturesVentes() {
 
   // Edit dialog
   const [editRow, setEditRow]       = useState<FactureVente | null>(null)
-  const [editForm, setEditForm]     = useState({ client_nom: '', date: '', echeance: '', montant_ht: '', tva: '', montant_ttc: '' })
+  const [editForm, setEditForm]     = useState({ client_nom: '', date: '', echeance: '', montant_ht: '', tva: '', montant_ttc: '', facture_electronique: false })
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
   const [updating, setUpdating]     = useState(false)
 
@@ -185,6 +186,7 @@ export default function FacturesVentes() {
       montant_ht:  String(row.montant_ht),
       tva:         String(row.tva),
       montant_ttc: String(row.montant_ttc),
+      facture_electronique: !!row.facture_electronique,
     })
     setEditErrors({})
   }
@@ -209,6 +211,7 @@ export default function FacturesVentes() {
         montant_ht:  Number(editForm.montant_ht),
         tva:         Number(editForm.tva),
         montant_ttc: Number(editForm.montant_ttc),
+        facture_electronique: editForm.facture_electronique,
       })
       setRows(p => p.map(r => r.id === editRow!.id ? { ...r, ...data } : r))
       toast.success('Facture modifiée avec succès !')
@@ -464,7 +467,23 @@ export default function FacturesVentes() {
                     return (
                       <TableRow key={row.id} sx={{ '&:hover': { bgcolor: '#f8f9ff' } }}>
                         <TableCell>
-                          <Typography fontWeight={700} fontSize={13} color="#1565C0">{row.numero}</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7 }}>
+                            <Typography fontWeight={700} fontSize={13} color="#1565C0">{row.numero}</Typography>
+                            {new Date(row.date) >= new Date('2026-01-01') && (
+                              <Tooltip title={row.facture_electronique
+                                ? 'Conforme à la facturation électronique (El Fatoora / TEIF)'
+                                : 'Facturation électronique non renseignée — obligatoire depuis le 1ᵉʳ janvier 2026'}>
+                                <Chip
+                                  label="e-facture" size="small"
+                                  sx={{
+                                    height: 18, fontSize: 9.5, fontWeight: 700,
+                                    bgcolor: row.facture_electronique ? '#E8F5E9' : '#FFF3E0',
+                                    color: row.facture_electronique ? '#2E7D32' : '#E65100',
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                          </Box>
                         </TableCell>
                         {isAdmin && (
                           <TableCell>
@@ -675,6 +694,26 @@ export default function FacturesVentes() {
                 inputProps={{ min: 0, step: '0.01' }}
                 value={editForm.montant_ttc} error={!!editErrors.montant_ttc} helperText={editErrors.montant_ttc}
                 onChange={e => setEditForm(f => ({ ...f, montant_ttc: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ borderRadius: 2, border: '1px solid #E2E8F0', px: 1.5, py: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={editForm.facture_electronique}
+                      onChange={e => setEditForm(f => ({ ...f, facture_electronique: e.target.checked }))}
+                    />
+                  }
+                  label={
+                    <Typography fontSize={13} fontWeight={600}>
+                      Facture émise via facturation électronique (El Fatoora / TEIF)
+                    </Typography>
+                  }
+                />
+                <Typography fontSize={11.5} color="text.secondary" sx={{ pl: 4.5 }}>
+                  Obligatoire en Tunisie pour toute facture datée à partir du 1ᵉʳ janvier 2026 (LF 2026).
+                </Typography>
+              </Box>
             </Grid>
           </Grid>
         </DialogContent>

@@ -68,6 +68,19 @@ function daysUntil(dateStr: string) {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
 }
 
+/**
+ * Prochaine occurrence du jour légal tunisien (le 15 de chaque mois pour les
+ * cotisations CNSS) à partir d'aujourd'hui, au format YYYY-MM-DD. Suggestion
+ * seulement — le champ reste modifiable par l'utilisateur.
+ */
+function nextLegalDeadline(day: number): string {
+  const now = new Date()
+  const year  = now.getFullYear()
+  const month = now.getDate() <= day ? now.getMonth() : now.getMonth() + 1
+  const d = new Date(year, month, day)
+  return d.toISOString().slice(0, 10)
+}
+
 function fmt(n: number) {
   return Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -781,6 +794,17 @@ export default function DeclarationsSociales() {
                     helperText={formErrors.date_limite}
                     onChange={e => setForm(f => ({ ...f, date_limite: e.target.value }))} />
                 </Grid>
+                {form.type === 'CNSS' && (
+                  <Grid item xs={12}>
+                    <Button
+                      size="small" variant="text"
+                      onClick={() => setForm(f => ({ ...f, date_limite: nextLegalDeadline(15) }))}
+                      sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12.5, p: 0.5 }}
+                    >
+                      Utiliser la prochaine échéance légale (le 15 — cotisations CNSS)
+                    </Button>
+                  </Grid>
+                )}
                 <Grid item xs={12} sm={6}>
                   <Box sx={{ p: 1.5, bgcolor: days !== null && days >= 0 ? '#FFF8E7' : '#FFF0F0', borderRadius: 2, height: '100%',
                     display: 'flex', alignItems: 'center', border: `1px solid ${days !== null && days < 0 ? '#FECACA' : '#FDE68A'}` }}>

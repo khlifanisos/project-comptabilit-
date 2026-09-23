@@ -11,11 +11,13 @@ class FactureVente extends Model
     protected $fillable = [
         'client_id', 'numero', 'client_nom', 'date', 'echeance',
         'montant_ht', 'tva', 'montant_ttc', 'statut_reglement', 'fichier', 'notes',
+        'facture_electronique',
     ];
 
     protected $casts = [
         'date' => 'date', 'echeance' => 'date',
         'montant_ht' => 'float', 'tva' => 'float', 'montant_ttc' => 'float',
+        'facture_electronique' => 'boolean',
     ];
 
     public function client()
