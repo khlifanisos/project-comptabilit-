@@ -18,6 +18,7 @@ import SecurityIcon       from '@mui/icons-material/Security'
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter'
 import MenuBookIcon       from '@mui/icons-material/MenuBook'
 import ForumIcon          from '@mui/icons-material/Forum'
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import { useAuth }          from '../../contexts/AuthContext'
 import { useProfilePhoto }  from '../../utils/useProfilePhoto'
 import { useThemeMode }     from '../../contexts/ThemeModeContext'
@@ -53,6 +54,7 @@ const clientBottomLinks = [
 const adminLinks = [
   // Tableau de bord hidden for now — route still exists at /admin, just not linked in nav.
   { label: 'Messagerie',      icon: <ForumIcon />,     path: '/admin/messages' },
+  { label: 'Tickets',         icon: <ConfirmationNumberIcon />, path: '/admin/tickets' },
   { label: 'Clients',         icon: <PeopleIcon />,    path: '/admin/clients' },
   { label: 'Documents',       icon: <FolderIcon />,    path: '/admin/documents' },
   { label: 'Audit intelligent', icon: <SecurityIcon />,  path: '/audit' },
@@ -67,6 +69,7 @@ const adminAxes = [
     icon: <BusinessCenterIcon />,
     items: [
       { label: 'Messagerie', icon: <ForumIcon />,    path: '/admin/messages' },
+      { label: 'Tickets',    icon: <ConfirmationNumberIcon />, path: '/admin/tickets' },
       { label: 'Rapports',   icon: <BarChartIcon />, path: '/admin/rapports' },
     ],
   },

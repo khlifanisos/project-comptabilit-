@@ -16,6 +16,8 @@ import Visibility from '@mui/icons-material/Visibility'
 import VisibilityOff from '@mui/icons-material/VisibilityOff'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline'
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser'
+import VpnKeyIcon from '@mui/icons-material/VpnKey'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import MarkEmailReadIcon from '@mui/icons-material/MarkEmailRead'
 import SmsIcon from '@mui/icons-material/Sms'
@@ -36,6 +38,8 @@ export default function Register() {
   const [emailError, setEmailError] = useState('')
   const [showPwd, setShowPwd]     = useState(false)
   const [role, setRole]           = useState<UserRole>('client')
+  const [adminType, setAdminType] = useState<'admin' | 'super_admin'>('admin')
+  const [superAdminCode, setSuperAdminCode] = useState('')
   const [step, setStep]           = useState<1 | 2>(1)
   const [sending, setSending]     = useState(false)
   const [verifyMethod, setVerifyMethod] = useState<'email' | 'sms'>('email')
@@ -95,6 +99,10 @@ export default function Register() {
       setError("L'entreprise est obligatoire pour un compte administrateur.")
       return
     }
+    if (role === 'admin' && adminType === 'super_admin' && !superAdminCode.trim()) {
+      setError('Le code Super Admin est obligatoire pour ce type de compte.')
+      return
+    }
     if (role === 'client' && !form.adresse.trim()) {
       setError("L'adresse est obligatoire.")
       return
@@ -141,7 +149,11 @@ export default function Register() {
     setError('')
     if (code.length !== 6) { setError('Le code doit contenir 6 chiffres.'); return }
     try {
-      await register({ ...form, role, code, avatar: avatar || undefined })
+      await register({
+        ...form, role, code, avatar: avatar || undefined,
+        admin_type: role === 'admin' ? adminType : undefined,
+        super_admin_code: role === 'admin' && adminType === 'super_admin' ? superAdminCode : undefined,
+      })
       toast.success('Compte créé avec succès !')
       navigate(role === 'admin' ? '/admin/clients' : '/releves')
     } catch (err: any) {
@@ -288,6 +300,39 @@ export default function Register() {
                     </ToggleButton>
                   </ToggleButtonGroup>
                 </Box>
+
+                {role === 'admin' && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography sx={{ fontSize: 12, color: '#64748B', mb: 1, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Niveau d'accès admin
+                    </Typography>
+                    <ToggleButtonGroup value={adminType} exclusive
+                      onChange={(_, v) => v && setAdminType(v)} fullWidth
+                      sx={{ gap: 1, '& .MuiToggleButtonGroup-grouped': { border: '1px solid rgba(0,0,0,0.1) !important', borderRadius: '8px !important', mx: '0 !important' } }}>
+                      <ToggleButton value="admin" sx={{
+                        flex: 1, py: 1.2, fontSize: 13, fontWeight: 600, gap: 0.8,
+                        color: '#64748B',
+                        '&.Mui-selected': { bgcolor: '#F0FDF4', color: '#16A34A', borderColor: '#16A34A !important' },
+                      }}>
+                        <AdminPanelSettingsIcon sx={{ fontSize: 18 }} /> Admin
+                      </ToggleButton>
+                      <ToggleButton value="super_admin" sx={{
+                        flex: 1, py: 1.2, fontSize: 13, fontWeight: 600, gap: 0.8,
+                        color: '#64748B',
+                        '&.Mui-selected': { bgcolor: '#F5F3FF', color: '#6A1B9A', borderColor: '#6A1B9A !important' },
+                      }}>
+                        <VerifiedUserIcon sx={{ fontSize: 18 }} /> Super Admin
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                    {adminType === 'super_admin' && (
+                      <TextField fullWidth label="Code Super Admin" type="password" value={superAdminCode}
+                        onChange={(e) => setSuperAdminCode(e.target.value)} required
+                        sx={{ mt: 1.5 }}
+                        helperText="Code fourni par l'administrateur de la plateforme."
+                        InputProps={{ startAdornment: <InputAdornment position="start"><VpnKeyIcon sx={{ color: '#94A3B8', fontSize: 18 }} /></InputAdornment> }} />
+                    )}
+                  </Box>
+                )}
 
                 <Divider sx={{ mb: 3 }} />
 

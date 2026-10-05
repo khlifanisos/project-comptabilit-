@@ -198,7 +198,22 @@ class AuthController extends Controller
             'adresse'               => 'nullable|string|max:500',
             'code'                  => 'required|digits:6',
             'avatar'                => 'nullable|string',
+            'admin_type'            => 'nullable|in:admin,super_admin',
+            'super_admin_code'      => 'nullable|string',
         ]);
+
+        // Un compte Super Admin contrôle TOUS les cabinets de la plateforme —
+        // il faut donc un code secret (SUPER_ADMIN_SIGNUP_CODE) pour en créer un,
+        // sinon n'importe quel visiteur pourrait s'auto-promouvoir à l'inscription.
+        $wantsSuperAdmin = $validated['role'] === 'admin' && ($validated['admin_type'] ?? 'admin') === 'super_admin';
+        if ($wantsSuperAdmin) {
+            $expectedCode = env('SUPER_ADMIN_SIGNUP_CODE');
+            if (!$expectedCode || ($validated['super_admin_code'] ?? '') !== $expectedCode) {
+                throw ValidationException::withMessages([
+                    'super_admin_code' => 'Code Super Admin invalide.',
+                ]);
+            }
+        }
 
         // Vérifier le code OTP
         $record = VerificationCode::where('email', $validated['email'])
@@ -237,6 +252,9 @@ class AuthController extends Controller
                 'mot_de_passe' => Hash::make($validated['password']),
                 'avatar'       => $avatarUrl,
             ]);
+            if ($wantsSuperAdmin) {
+                $user->forceFill(['is_super_admin' => true])->save();
+            }
             // Rename avatar file with real ID
             if ($avatarUrl) {
                 $newName = 'admin_' . $user->id . '.jpg';

@@ -13,6 +13,8 @@ use App\Http\Controllers\EcheancierLeasingController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\InvoiceAnalysisController;
+use App\Http\Controllers\ExcelExportController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\AdminDocumentController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\TexteLoiController;
@@ -131,6 +133,25 @@ Route::middleware('auth:sanctum')->group(function () {
     // Audit intelligent
     Route::get('/audit', [AuditController::class, 'index']);
     Route::get('/audit/ai-summary', [AuditController::class, 'aiSummary']);
+
+    // Tickets (super admin assigne, admin exécute, super admin valide)
+    Route::get('/tickets',                  [TicketController::class, 'index']);
+    Route::get('/tickets/assignable-admins', [TicketController::class, 'assignableAdmins']);
+    Route::post('/tickets',                 [TicketController::class, 'store']);
+    Route::put('/tickets/{id}',             [TicketController::class, 'update']);
+    Route::delete('/tickets/{id}',          [TicketController::class, 'destroy']);
+    Route::post('/tickets/{id}/start',      [TicketController::class, 'start']);
+    Route::post('/tickets/{id}/submit',     [TicketController::class, 'submit']);
+    Route::post('/tickets/{id}/validate',   [TicketController::class, 'validateTicket']);
+    Route::post('/tickets/{id}/reject',     [TicketController::class, 'reject']);
+    Route::post('/tickets/{id}/attachments',                    [TicketController::class, 'uploadAttachment']);
+    Route::get('/tickets/{id}/attachments/{attachmentId}/fichier', [TicketController::class, 'downloadAttachment']);
+    Route::delete('/tickets/{id}/attachments/{attachmentId}',   [TicketController::class, 'deleteAttachment']);
+
+    // Fichiers Excel archivés (analyses de factures converties)
+    Route::get('/excel-exports',              [ExcelExportController::class, 'index']);
+    Route::get('/excel-exports/{id}/fichier', [ExcelExportController::class, 'fichier']);
+    Route::delete('/excel-exports/{id}',      [ExcelExportController::class, 'destroy']);
 
     // Textes et lois (admin)
     Route::get('/textes-lois',              [TexteLoiController::class, 'index']);

@@ -110,7 +110,9 @@ export default function AdminDashboard() {
             </Typography>
           </Box>
         </Box>
-        <Chip label="SUPER ADMIN" sx={{ bgcolor: '#FF6F00', color: 'white', fontWeight: 800, fontSize: 11 }} />
+        {user?.is_super_admin && (
+          <Chip label="SUPER ADMIN" sx={{ bgcolor: '#FF6F00', color: 'white', fontWeight: 800, fontSize: 11 }} />
+        )}
       </Box>
 
       <Grid container spacing={2.5} mb={3}>

@@ -77,7 +77,13 @@ class ProfileController extends Controller
             $filename = $role . '_' . $user->id . '.jpg';
             file_put_contents($dir . '/' . $filename, $imageData);
 
-            $avatarUrl = config('app.url') . '/uploads/avatars/' . $filename;
+            // Cache-bust: the filename is stable per user (always overwritten in
+            // place), so without a version suffix the URL never changes between
+            // uploads — React sees the same string and skips re-rendering the
+            // <img>, and the browser keeps showing its cached copy until a full
+            // page reload forces a re-fetch. Appending a timestamp makes every
+            // upload produce a genuinely new URL.
+            $avatarUrl = config('app.url') . '/uploads/avatars/' . $filename . '?v=' . time();
         }
 
         $user->update(['avatar' => $avatarUrl]);

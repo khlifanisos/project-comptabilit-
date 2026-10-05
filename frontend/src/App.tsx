@@ -39,6 +39,7 @@ import AdminAudit from './pages/admin/AdminAudit'
 import AdminTextesLois from './pages/admin/AdminTextesLois'
 import AdminMessagerie from './pages/admin/AdminMessagerie'
 import AdminSettings from './pages/admin/AdminSettings'
+import AdminTickets from './pages/admin/AdminTickets'
 
 function AuditPage() {
   const { user } = useAuth()
@@ -150,6 +151,11 @@ function ThemedApp() {
             <Route path="/admin/messages" element={
               <ProtectedRoute allowedRole="admin">
                 <DashboardLayout><AdminMessagerie /></DashboardLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/tickets" element={
+              <ProtectedRoute allowedRole="admin">
+                <DashboardLayout><AdminTickets /></DashboardLayout>
               </ProtectedRoute>
             } />
             <Route path="/admin/audit" element={

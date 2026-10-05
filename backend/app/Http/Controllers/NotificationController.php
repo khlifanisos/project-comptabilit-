@@ -9,14 +9,26 @@ use Illuminate\Support\Facades\Mail;
 
 class NotificationController extends Controller
 {
+    /**
+     * Visibility rule for an admin: a notification targeted specifically at
+     * them (admin_id = their id), or a cabinet-wide broadcast
+     * (admin_id AND client_id both null, from notifyAdmins()). Never another
+     * admin's targeted notification.
+     */
+    private function adminVisibilityQuery(Administrateur $admin)
+    {
+        return Notification::where(function ($q) use ($admin) {
+            $q->where('admin_id', $admin->id)
+              ->orWhere(function ($q2) { $q2->whereNull('admin_id')->whereNull('client_id'); });
+        });
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            $notifications = Notification::whereNotNull('admin_id')
-                ->orWhereNull('client_id')
-                ->latest()->take(50)->get();
+            $notifications = $this->adminVisibilityQuery($user)->latest()->take(50)->get();
         } else {
             $notifications = Notification::where('client_id', $user->id)
                 ->latest()->take(50)->get();
@@ -27,7 +39,7 @@ class NotificationController extends Controller
 
     public function markRead(Request $request, int $id)
     {
-        $notification = Notification::findOrFail($id);
+        $notification = $this->visible($request, $id);
         $notification->update(['lu' => true]);
         return response()->json($notification);
     }
@@ -37,10 +49,7 @@ class NotificationController extends Controller
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            // Mark both admin-specific AND global (client_id=null, admin_id=null) notifications as read
-            Notification::where(function ($q) {
-                $q->whereNotNull('admin_id')->orWhereNull('client_id');
-            })->update(['lu' => true]);
+            $this->adminVisibilityQuery($user)->update(['lu' => true]);
         } else {
             Notification::where('client_id', $user->id)->update(['lu' => true]);
         }
@@ -50,7 +59,7 @@ class NotificationController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        Notification::findOrFail($id)->delete();
+        $this->visible($request, $id)->delete();
         return response()->json(['message' => 'Notification supprimée.']);
     }
 
@@ -59,14 +68,28 @@ class NotificationController extends Controller
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            Notification::where(function ($q) {
-                $q->whereNotNull('admin_id')->orWhereNull('client_id');
-            })->delete();
+            $this->adminVisibilityQuery($user)->delete();
         } else {
             Notification::where('client_id', $user->id)->delete();
         }
 
         return response()->json(['message' => 'Toutes les notifications supprimées.']);
+    }
+
+    /** Fetches a notification by id, 404ing if it isn't one the caller may see. */
+    private function visible(Request $request, int $id): Notification
+    {
+        $user = $request->user();
+        $notification = Notification::findOrFail($id);
+
+        $allowed = $user instanceof Administrateur
+            ? ($notification->admin_id === $user->id || ($notification->admin_id === null && $notification->client_id === null))
+            : $notification->client_id === $user->id;
+
+        if (!$allowed) {
+            abort(404);
+        }
+        return $notification;
     }
 
     // Notification visible par tous les admins (client_id=null, admin_id=null)
@@ -75,6 +98,18 @@ class NotificationController extends Controller
         Notification::create([
             'client_id' => null,
             'admin_id'  => null,
+            'titre'     => $titre,
+            'message'   => $message,
+            'type'      => $type,
+        ]);
+    }
+
+    // Notification visible uniquement par CET admin (ex: ticket qui lui est assigné)
+    public static function notifyAdmin(int $adminId, string $titre, string $message, string $type = 'info'): void
+    {
+        Notification::create([
+            'client_id' => null,
+            'admin_id'  => $adminId,
             'titre'     => $titre,
             'message'   => $message,
             'type'      => $type,

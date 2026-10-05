@@ -24,6 +24,8 @@ interface RegisterData {
   role: UserRole
   code: string
   avatar?: string
+  admin_type?: 'admin' | 'super_admin'
+  super_admin_code?: string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)

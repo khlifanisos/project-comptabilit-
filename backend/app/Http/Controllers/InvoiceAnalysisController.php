@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Administrateur;
+use App\Models\ExcelExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -23,9 +25,11 @@ class InvoiceAnalysisController extends Controller
 Return ONLY a valid JSON object — no markdown, no code fences, no explanation, nothing else.
 
 {
-  "fournisseur": "name of the seller / vendor company",
+  "fournisseur": "the seller/vendor company name, copied exactly and in full as printed",
+  "matricule_fiscal": "the seller\'s Tunisian tax ID (Matricule Fiscal / MF), exactly as printed",
   "numero_facture": "invoice number or reference",
   "date": "invoice date as YYYY-MM-DD",
+  "devise": "currency code used on the invoice",
   "montant_ht": 0.00,
   "tva": 0.00,
   "montant_ttc": 0.00,
@@ -59,13 +63,44 @@ CRITICAL RULES FOR resume:
 1. Capture EVERY summary/footer row that appears AFTER the product lines table, in order.
 2. Include ALL of: sous-total, subtotal, remise, discount, taux de taxe, tax rate, total de taxe, TVA, expédition, manutention, transport, frais de livraison, autres frais, autre, net à payer, total, grand total, etc.
 3. valeur is always a string — keep the exact value as shown including symbols (%, $, MAD, €).
-4. If no summary section exists, use an empty array [].';
+4. If no summary section exists, use an empty array [].
+
+CRITICAL RULE FOR fournisseur:
+Copy the seller/vendor company name EXACTLY and IN FULL as it is printed on the invoice header —
+never shorten, abbreviate, translate or paraphrase it. Include legal suffixes if shown
+(SARL, SUARL, SA, EURL, Sté, Ets, &Cie, etc.) and keep the exact spelling, accents and punctuation.
+
+CRITICAL RULE FOR matricule_fiscal:
+Find the seller\'s Matricule Fiscal (Tunisian tax identification number), usually labeled
+"M.F.", "MF", "Matricule Fiscal" or "Identifiant Fiscal", near the seller\'s name/address or in
+the invoice footer. It typically looks like 7 digits followed by a letter and category codes
+(e.g. "1234567A/A/M/000" or "0123456B"). Copy it exactly as printed, including slashes.
+If no matricule fiscal appears anywhere on the invoice, return an empty string "" — never invent one.
+
+CRITICAL RULE FOR devise:
+Identify the currency actually printed on the invoice from any symbol, code or word shown
+next to the amounts (e.g. "TND"/"DT"/"دينار" → TND, "€"/"EUR"/"Euro" → EUR, "$"/"USD"/"Dollar" → USD,
+"DH"/"MAD"/"Dirham" → MAD, "£"/"GBP" → GBP). Return the standard 3-letter code in uppercase.
+If the invoice does not clearly show a currency anywhere, default to "TND" (Tunisian Dinar) —
+never leave this field empty and never guess a currency that is not evidenced on the document.';
+
+    /**
+     * Normalizes whatever the model returns for "devise" into a clean 3-6
+     * character currency code, falling back to TND (the app's own default
+     * currency, see Parametre::currentDevise()) when the model omits it or
+     * returns something unusable.
+     */
+    private static function normalizeDevise(mixed $raw): string
+    {
+        $devise = strtoupper(trim((string) $raw));
+        return ($devise !== '' && strlen($devise) <= 6) ? $devise : 'TND';
+    }
 
     public static function extractData(string $storagePath): array
     {
         $apiKey = env('GEMINI_API_KEY');
         if (!$apiKey || !Storage::disk('public')->exists($storagePath)) {
-            return ['lignes' => [], 'resume' => []];
+            return ['lignes' => [], 'resume' => [], 'devise' => 'TND'];
         }
 
         $fullPath = Storage::disk('public')->path($storagePath);
@@ -116,10 +151,10 @@ CRITICAL RULES FOR resume:
                 $val = trim((string) ($r['valeur'] ?? ''));
                 if ($lbl !== '') $resume[] = ['label' => $lbl, 'valeur' => $val];
             }
-            return ['lignes' => $lignes, 'resume' => $resume];
+            return ['lignes' => $lignes, 'resume' => $resume, 'devise' => self::normalizeDevise($data['devise'] ?? null)];
         }
 
-        return ['lignes' => [], 'resume' => []];
+        return ['lignes' => [], 'resume' => [], 'devise' => 'TND'];
     }
 
     public static function extractLignes(string $storagePath): array
@@ -212,9 +247,11 @@ CRITICAL RULES FOR resume:
             }
 
             return response()->json([
-                'fournisseur'    => (string) ($data['fournisseur']    ?? ''),
+                'fournisseur'      => (string) ($data['fournisseur']      ?? ''),
+                'matricule_fiscal' => (string) ($data['matricule_fiscal'] ?? ''),
                 'numero_facture' => (string) ($data['numero_facture'] ?? ''),
                 'date'           => (string) ($data['date']           ?? ''),
+                'devise'         => self::normalizeDevise($data['devise'] ?? null),
                 'montant_ht'     => (float)  ($data['montant_ht']     ?? 0),
                 'tva'            => (float)  ($data['tva']            ?? 0),
                 'montant_ttc'    => (float)  ($data['montant_ttc']    ?? 0),
@@ -236,12 +273,17 @@ CRITICAL RULES FOR resume:
             'montant_ht'     => 'required|numeric|min:0',
             'tva'            => 'required|numeric|min:0',
             'montant_ttc'    => 'required|numeric|min:0',
-            'numero_facture' => 'nullable|string|max:100',
+            'numero_facture'   => 'nullable|string|max:100',
+            'matricule_fiscal' => 'nullable|string|max:50',
+            'devise'         => 'nullable|string|max:10',
+            'source'         => 'nullable|in:achat,vente',
+            'client_id'      => 'nullable|integer',
             'lignes'         => 'nullable|array',
             'resume'         => 'nullable|array',
         ]);
 
         $fournisseur = $request->input('fournisseur');
+        $matricule   = $request->input('matricule_fiscal', '');
         $date        = $request->input('date');
         $ht          = (float) $request->input('montant_ht');
         $tva         = (float) $request->input('tva');
@@ -259,7 +301,9 @@ CRITICAL RULES FOR resume:
         }
 
         $numFmt  = '#,##0.00';
-        $devise    = \App\Models\Parametre::currentDevise();
+        // Use the currency actually detected on this invoice — falls back to the
+        // cabinet's default (TND) only if the caller didn't send one at all.
+        $devise    = self::normalizeDevise($request->input('devise') ?: \App\Models\Parametre::currentDevise());
         $blueDark  = '2D5EA8';
         $blueMid   = '4472C4';
         $blueLight = 'D6E4F0';
@@ -283,32 +327,40 @@ CRITICAL RULES FOR resume:
         ]);
         $sheet->getRowDimension(1)->setRowHeight(22);
 
-        // ── Row 2: Invoice meta ───────────────────────────
-        $sheet->setCellValue('A2', "N° Facture : {$numero}");
-        $sheet->setCellValue('C2', "Date : {$dateFormatted}");
-        $sheet->setCellValue('E2', "Généré le : {$generated}");
-        $sheet->getStyle('A2:E2')->getFont()->setSize(10)->setItalic(true);
-        $sheet->getStyle('A2:E2')->getFont()->getColor()->setRGB('555555');
+        // ── Row 2: Matricule Fiscal (MF) ───────────────────
+        if ($matricule !== '') {
+            $sheet->setCellValue('A2', "Matricule Fiscal (MF) : {$matricule}");
+            $sheet->getStyle('A2')->getFont()->setSize(10)->setBold(true);
+            $sheet->getStyle('A2')->getFont()->getColor()->setRGB('2D5EA8');
+        }
         $sheet->getRowDimension(2)->setRowHeight(16);
 
-        // ── Row 3: spacer
-        $sheet->getRowDimension(3)->setRowHeight(6);
+        // ── Row 3: Invoice meta ───────────────────────────
+        $sheet->setCellValue('A3', "N° Facture : {$numero}");
+        $sheet->setCellValue('C3', "Date : {$dateFormatted}");
+        $sheet->setCellValue('E3', "Généré le : {$generated}");
+        $sheet->getStyle('A3:E3')->getFont()->setSize(10)->setItalic(true);
+        $sheet->getStyle('A3:E3')->getFont()->getColor()->setRGB('555555');
+        $sheet->getRowDimension(3)->setRowHeight(16);
 
-        // ── Row 4: Column headers ─────────────────────────
+        // ── Row 4: spacer
+        $sheet->getRowDimension(4)->setRowHeight(6);
+
+        // ── Row 5: Column headers ─────────────────────────
         $headers = ['N°', 'DÉSIGNATION', 'QTÉ', 'PRIX U.', 'TOTAL HT'];
         foreach ($headers as $i => $h) {
             $col = chr(65 + $i);
-            $sheet->setCellValue("{$col}4", $h);
+            $sheet->setCellValue("{$col}5", $h);
         }
-        $sheet->getStyle('A4:E4')->applyFromArray([
+        $sheet->getStyle('A5:E5')->applyFromArray([
             'font'      => ['bold' => true, 'size' => 10, 'color' => ['rgb' => $white]],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $blueDark]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        $sheet->getRowDimension(4)->setRowHeight(20);
+        $sheet->getRowDimension(5)->setRowHeight(20);
 
         // ── Data rows ─────────────────────────────────────
-        $dataStart = 5;
+        $dataStart = 6;
         $r = $dataStart;
 
         if (!empty($lignes)) {
@@ -355,7 +407,7 @@ CRITICAL RULES FOR resume:
             $sheet->setCellValue("C{$r}", '');
             $sheet->setCellValue("D{$r}", '');
             $sheet->setCellValue("E{$r}", $ht);
-            $sheet->getStyle("E{$r}")->getNumberFormat()->setFormatCode($numFmt . ' "€"');
+            $sheet->getStyle("E{$r}")->getNumberFormat()->setFormatCode($numFmt . " \"{$devise}\"");
             $r++;
         }
 
@@ -424,6 +476,7 @@ CRITICAL RULES FOR resume:
 
         $summaryItems = [
             ['Fournisseur',   $fournisseur],
+            ['Matricule Fiscal (MF)', $matricule ?: '—'],
             ['N° Facture',    $numero ?: '—'],
             ['Date',          $dateFormatted],
             ['Montant HT',    $ht],
@@ -441,7 +494,7 @@ CRITICAL RULES FOR resume:
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $blueRow]],
             ]);
             if (is_float($val)) {
-                $sum->getStyle("B{$row}")->getNumberFormat()->setFormatCode($numFmt . ' "€"');
+                $sum->getStyle("B{$row}")->getNumberFormat()->setFormatCode($numFmt . " \"{$devise}\"");
             }
         }
         $sum->getColumnDimension('A')->setWidth(22);
@@ -457,10 +510,49 @@ CRITICAL RULES FOR resume:
         $writer->save('php://output');
         $content = ob_get_clean();
 
+        $this->archiveExport($request, $content, $filename, $fournisseur, $numero, $devise);
+
         return response($content, 200, [
             'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
             'Cache-Control'       => 'no-cache',
         ]);
+    }
+
+    /**
+     * Keeps a copy of every Excel conversion on disk so an admin can find it
+     * again later from the client's dossier ("Fichiers Excel" folder),
+     * instead of it existing only as a one-off browser download. Silently
+     * skipped if we can't tell which client it belongs to (e.g. an admin
+     * generating one without selecting a client) — archiving must never
+     * block the download itself.
+     */
+    private function archiveExport(Request $request, string $content, string $filename, string $fournisseur, string $numero, string $devise): void
+    {
+        $user = $request->user();
+        $clientId = $user instanceof Administrateur
+            ? (int) $request->input('client_id', 0) ?: null
+            : $user->id;
+
+        if (!$clientId) return;
+
+        $source = $request->input('source');
+        if (!in_array($source, ['achat', 'vente'], true)) return;
+
+        try {
+            $path = "excel_exports/{$clientId}/" . uniqid() . "_{$filename}";
+            Storage::disk('public')->put($path, $content);
+
+            ExcelExport::create([
+                'client_id' => $clientId,
+                'source'    => $source,
+                'reference' => trim($fournisseur . ($numero ? " — {$numero}" : '')) ?: $filename,
+                'devise'    => $devise,
+                'fichier'   => $path,
+                'taille'    => strlen($content),
+            ]);
+        } catch (\Exception) {
+            // Archiving is best-effort — the download itself already succeeded.
+        }
     }
 }

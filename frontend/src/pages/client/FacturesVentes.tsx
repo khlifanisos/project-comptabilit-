@@ -18,6 +18,7 @@ import EditIcon        from '@mui/icons-material/Edit'
 import SaveIcon        from '@mui/icons-material/Save'
 import toast from 'react-hot-toast'
 import api from '../../api/axios'
+import { renderPdfFirstPageThumbnail } from '../../utils/pdfWorker'
 import { useCurrency } from '../../contexts/CurrencyContext'
 
 interface FactureVente {
@@ -47,9 +48,11 @@ interface ResumeRow { label: string; valeur: string }
 
 interface Extracted {
   client_nom: string
+  matricule_fiscal: string
   numero_facture: string
   date: string
   echeance: string
+  devise: string
   montant_ht: string
   tva: string
   montant_ttc: string
@@ -65,7 +68,7 @@ const statusMap: Record<string, { label: string; color: string; bg: string }> = 
 }
 
 const emptyForm: Extracted = {
-  client_nom: '', numero_facture: '', date: '', echeance: '',
+  client_nom: '', matricule_fiscal: '', numero_facture: '', date: '', echeance: '', devise: 'TND',
   montant_ht: '', tva: '', montant_ttc: '', lignes: [], resume: [],
 }
 
@@ -84,6 +87,7 @@ export default function FacturesVentes() {
   const [importOpen, setImportOpen] = useState(false)
   const [imageFile, setImageFile]   = useState<File | null>(null)
   const [preview, setPreview]       = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [analyzing, setAnalyzing]   = useState(false)
   const [analyzed, setAnalyzed]     = useState(false)
   const [form, setForm]             = useState<Extracted>(emptyForm)
@@ -270,6 +274,17 @@ export default function FacturesVentes() {
     setAnalyzed(false)
     setForm(emptyForm)
     setFormErrors({})
+    setPreview(null)
+
+    if (file.type === 'application/pdf') {
+      // <img> can't render a PDF data URI — rasterize the first page instead.
+      setPreviewLoading(true)
+      renderPdfFirstPageThumbnail(file)
+        .then(setPreview)
+        .catch(() => setPreview(null))
+        .finally(() => setPreviewLoading(false))
+      return
+    }
     const reader = new FileReader()
     reader.onload = e => setPreview(e.target?.result as string)
     reader.readAsDataURL(file)
@@ -287,10 +302,12 @@ export default function FacturesVentes() {
         timeout: 60000,
       })
       setForm(prev => ({
-        client_nom:     String(data.fournisseur    ?? ''),
+        client_nom:       String(data.fournisseur      ?? ''),
+        matricule_fiscal: String(data.matricule_fiscal  ?? ''),
         numero_facture: String(data.numero_facture ?? ''),
         date:           String(data.date           ?? ''),
         echeance:       prev.echeance,
+        devise:         String(data.devise          || 'TND'),
         montant_ht:     String(data.montant_ht     ?? ''),
         tva:            String(data.tva            ?? ''),
         montant_ttc:    String(data.montant_ttc    ?? ''),
@@ -307,17 +324,23 @@ export default function FacturesVentes() {
     }
   }
 
-  /* ── Download Excel from analyzed invoice ── */
-  const handleDownloadExcel = async () => {
+  /* ── Generate Excel from analyzed invoice ──
+     download=true  → user clicked "Télécharger Excel": stream the file to them.
+     download=false → called silently right after saving, so the Excel archive
+     exists in the admin dossier even when the user never clicked that button. */
+  const generateExcel = async (download: boolean) => {
     try {
       const token = sessionStorage.getItem('token')
       const res = await fetch(`${api.defaults.baseURL}/factures-ventes/excel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          fournisseur:    form.client_nom.trim() || 'Client',
+          fournisseur:      form.client_nom.trim() || 'Client',
+          matricule_fiscal: form.matricule_fiscal,
           numero_facture: form.numero_facture,
           date:           form.date,
+          devise:         form.devise,
+          source:         'vente',
           montant_ht:     Number(form.montant_ht)  || 0,
           tva:            Number(form.tva)          || 0,
           montant_ttc:    Number(form.montant_ttc)  || 0,
@@ -329,6 +352,7 @@ export default function FacturesVentes() {
         const err = await res.json().catch(() => ({}))
         throw new Error(err?.message ?? `HTTP ${res.status}`)
       }
+      if (!download) return
       const blob = await res.blob()
       const disp  = res.headers.get('Content-Disposition') ?? ''
       const match = disp.match(/filename="?([^"]+)"?/)
@@ -339,9 +363,13 @@ export default function FacturesVentes() {
       URL.revokeObjectURL(a.href)
       toast.success('Fichier Excel téléchargé !')
     } catch (e: any) {
-      toast.error(`Erreur Excel : ${e?.message ?? 'Réessayez'}`)
+      if (download) toast.error(`Erreur Excel : ${e?.message ?? 'Réessayez'}`)
+      // Silent archive attempt failing shouldn't alarm the user — the facture
+      // itself was already saved successfully.
     }
   }
+
+  const handleDownloadExcel = () => generateExcel(true)
 
   /* ── Save to DB ─────────────────────────── */
   const handleSave = async () => {
@@ -370,6 +398,9 @@ export default function FacturesVentes() {
         timeout: 30000,
       })
       toast.success('Facture enregistrée !')
+      // Archive the Excel version too, even if the user never clicked
+      // "Télécharger Excel" — so it still shows up in the admin dossier.
+      if (analyzed) generateExcel(false)
       setImportOpen(false)
       setImageFile(null)
       setPreview(null)
@@ -764,9 +795,19 @@ export default function FacturesVentes() {
                   alignItems: 'center', justifyContent: 'center', gap: 1,
                   transition: 'all 0.2s', overflow: 'hidden',
                 }}>
-                {preview ? (
+                {previewLoading ? (
+                  <>
+                    <CircularProgress size={28} />
+                    <Typography fontSize={12} color="text.secondary">Aperçu du PDF…</Typography>
+                  </>
+                ) : preview ? (
                   <Box component="img" src={preview}
                     sx={{ maxHeight: 180, maxWidth: '100%', borderRadius: 2, objectFit: 'contain' }} />
+                ) : imageFile ? (
+                  <>
+                    <UploadFileIcon sx={{ fontSize: 40, color: '#94A3B8' }} />
+                    <Typography fontSize={12} color="text.secondary">Aperçu indisponible</Typography>
+                  </>
                 ) : (
                   <>
                     <UploadFileIcon sx={{ fontSize: 40, color: '#94A3B8' }} />
@@ -829,11 +870,16 @@ export default function FacturesVentes() {
                     </Alert>
                   )}
                   <Grid container spacing={2}>
-                    <Grid item xs={12}>
+                    <Grid item xs={12} sm={8}>
                       <TextField fullWidth label="Client / Destinataire *" placeholder="Nom du client"
                         InputLabelProps={{ shrink: true }} value={form.client_nom}
                         error={!!formErrors.client_nom} helperText={formErrors.client_nom}
                         onChange={e => setForm(f => ({ ...f, client_nom: e.target.value }))} />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField fullWidth label="Matricule Fiscal (MF)" placeholder="ex: 1234567A/A/M/000"
+                        InputLabelProps={{ shrink: true }} value={form.matricule_fiscal}
+                        onChange={e => setForm(f => ({ ...f, matricule_fiscal: e.target.value }))} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <TextField fullWidth label="N° Facture" placeholder="ex: VTE-2025-001"
@@ -853,21 +899,21 @@ export default function FacturesVentes() {
                         onChange={e => setForm(f => ({ ...f, echeance: e.target.value }))} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField fullWidth label={`Montant HT (${devise}) *`} placeholder="0.00"
+                      <TextField fullWidth label={`Montant HT (${form.devise}) *`} placeholder="0.00"
                         InputLabelProps={{ shrink: true }} type="number"
                         inputProps={{ min: 0, step: '0.01' }} value={form.montant_ht}
                         error={!!formErrors.montant_ht} helperText={formErrors.montant_ht}
                         onChange={e => setForm(f => ({ ...f, montant_ht: e.target.value }))} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField fullWidth label={`TVA (${devise}) *`} placeholder="0.00"
+                      <TextField fullWidth label={`TVA (${form.devise}) *`} placeholder="0.00"
                         InputLabelProps={{ shrink: true }} type="number"
                         inputProps={{ min: 0, step: '0.01' }} value={form.tva}
                         error={!!formErrors.tva} helperText={formErrors.tva}
                         onChange={e => setForm(f => ({ ...f, tva: e.target.value }))} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField fullWidth label={`Montant TTC (${devise}) *`} placeholder="0.00"
+                      <TextField fullWidth label={`Montant TTC (${form.devise}) *`} placeholder="0.00"
                         InputLabelProps={{ shrink: true }} type="number"
                         inputProps={{ min: 0, step: '0.01' }} value={form.montant_ttc}
                         error={!!formErrors.montant_ttc} helperText={formErrors.montant_ttc}
@@ -877,7 +923,7 @@ export default function FacturesVentes() {
                       <Grid item xs={12}>
                         <Box sx={{ p: 1.5, bgcolor: '#E3F0FF', borderRadius: 2 }}>
                           <Typography fontSize={13} color="#1565C0" fontWeight={700}>
-                            TTC calculé : {(Number(form.montant_ht) + Number(form.tva)).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {devise}
+                            TTC calculé : {(Number(form.montant_ht) + Number(form.tva)).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {form.devise}
                           </Typography>
                         </Box>
                       </Grid>

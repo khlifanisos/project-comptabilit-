@@ -10,6 +10,7 @@ export interface User {
   adresse?: string
   avatar?: string
   created_at?: string
+  is_super_admin?: boolean
 }
 
 export interface AuthState {
