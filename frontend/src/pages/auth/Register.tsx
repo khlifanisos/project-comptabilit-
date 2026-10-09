@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
-  Box, Card, CardContent, Typography, TextField, Button,
+  Box, Typography, TextField, Button,
   InputAdornment, IconButton, Alert, CircularProgress,
   ToggleButtonGroup, ToggleButton, Grid, Divider
 } from '@mui/material'
@@ -25,9 +25,9 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { useAuth } from '../../contexts/AuthContext'
 import { UserRole } from '../../types'
 import api from '../../api/axios'
+import AuthVisualPanel from '../../components/auth/AuthVisualPanel'
 import toast from 'react-hot-toast'
 
-const NAV_BG  = '#0A1628'
 const PRIMARY = '#1565C0'
 const ACCENT  = '#3B82F6'
 
@@ -167,68 +167,58 @@ export default function Register() {
   }
 
   return (
-    <Box sx={{
-      minHeight: '100vh',
-      bgcolor: NAV_BG,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      p: 2, position: 'relative', overflow: 'hidden',
-    }}>
-      {/* Subtle background glows */}
-      <Box sx={{ position:'absolute', top:-150, right:-150, width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 65%)', pointerEvents:'none' }} />
-      <Box sx={{ position:'absolute', bottom:-100, left:-100, width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 65%)', pointerEvents:'none' }} />
+    <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: '#F8FAFC' }}>
+      <AuthVisualPanel
+        title={'Rejoignez\nIntelligence Comptabilité.'}
+        subtitle="Créez votre compte en quelques instants et accédez à votre espace dédié."
+        order={2}
+      />
 
-      <Box sx={{ width:'100%', maxWidth: 480, position:'relative', zIndex:1 }}>
+      <Box sx={{
+        order: 1,
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        p: 2.5, position: 'relative', overflow: 'hidden',
+      }}>
+        {/* Subtle mobile-only background glow (visual panel is hidden below md) */}
+        <Box sx={{
+          display: { xs: 'block', md: 'none' },
+          position: 'absolute', top: -150, right: -150, width: 400, height: 400, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 65%)', pointerEvents: 'none',
+        }} />
 
-        {/* Logo + title */}
-        <Box sx={{ textAlign:'center', mb: 3.5 }}>
-          <Box sx={{
-            width: 46, height: 46, borderRadius: '12px',
-            background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            mx: 'auto', mb: 2,
-            boxShadow: '0 4px 16px rgba(59,130,246,0.4)',
-          }}>
-            <BarChartIcon sx={{ color: 'white', fontSize: 24 }} />
-          </Box>
-          <Typography sx={{ color: 'white', fontWeight: 700, fontSize: 20, letterSpacing: '-0.01em' }}>
-            Créer un compte
-          </Typography>
-          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12.5, mt: 0.4 }}>
-            Intelligence Comptabilité
-          </Typography>
-        </Box>
+        <Box sx={{ width: '100%', maxWidth: 480, position: 'relative', zIndex: 1, py: 2 }}>
 
-        {/* Card */}
-        <Card sx={{
-          borderRadius: '16px',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
-          border: '1px solid rgba(255,255,255,0.06)',
-          bgcolor: '#FFFFFF',
-          overflow: 'hidden',
-        }}>
-          {/* Card header */}
-          <Box sx={{
-            bgcolor: NAV_BG,
-            px: 3, py: 2,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: '1px solid rgba(255,255,255,0.07)',
-          }}>
-            <Typography sx={{ fontWeight: 700, color: 'white', fontSize: 15 }}>
-              {step === 1 ? 'Inscription' : verifyMethod === 'sms' ? 'Vérification SMS' : 'Vérification email'}
+          {/* Logo + title */}
+          <Box className="reveal-up is-visible" sx={{ mb: 3 }}>
+            <Box sx={{
+              display: { xs: 'flex', md: 'none' },
+              width: 42, height: 42, borderRadius: '10px',
+              background: 'linear-gradient(135deg,#3B82F6,#1D4ED8)',
+              alignItems: 'center', justifyContent: 'center', mb: 2,
+            }}>
+              <BarChartIcon sx={{ color: 'white', fontSize: 22 }} />
+            </Box>
+            <Typography sx={{ fontWeight: 800, fontSize: 22, color: '#0F172A', letterSpacing: '-0.015em', mb: 0.5 }}>
+              Créer un compte
             </Typography>
-            <Box sx={{ display: 'flex', gap: 0.6 }}>
-              {[1, 2].map((s) => (
-                <Box key={s} sx={{
-                  width: s === step ? 20 : 6, height: 6,
-                  borderRadius: '3px',
-                  bgcolor: s === step ? ACCENT : 'rgba(255,255,255,0.2)',
-                  transition: 'all 0.3s',
-                }} />
-              ))}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+              <Typography sx={{ color: '#64748B', fontSize: 13.5 }}>
+                {step === 1 ? 'Vos informations' : verifyMethod === 'sms' ? 'Vérification SMS' : 'Vérification email'}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {[1, 2].map((s) => (
+                  <Box key={s} sx={{
+                    width: s === step ? 18 : 6, height: 6,
+                    borderRadius: '3px',
+                    bgcolor: s === step ? ACCENT : '#E2E8F0',
+                    transition: 'all 0.3s',
+                  }} />
+                ))}
+              </Box>
             </Box>
           </Box>
 
-          <CardContent sx={{ p: 3.5 }}>
+          <Box className="reveal-up is-visible" style={{ animationDelay: '60ms' }}>
             {error && (
               <Alert severity="error" sx={{ mb: 2.5, borderRadius: '8px', fontSize: 13 }}>
                 {error}
@@ -529,8 +519,8 @@ export default function Register() {
                 ← Retour à l'accueil
               </Typography>
             </Box>
-          </CardContent>
-        </Card>
+          </Box>
+        </Box>
       </Box>
     </Box>
   )

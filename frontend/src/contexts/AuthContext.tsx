@@ -5,7 +5,7 @@ import api from '../api/axios'
 interface AuthContextType {
   user: User | null
   token: string | null
-  login: (email: string, password: string, role?: UserRole) => Promise<void>
+  login: (email: string, password: string, role?: UserRole) => Promise<UserRole>
   register: (data: RegisterData) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem('token', data.token)
       sessionStorage.setItem('user', JSON.stringify(data.user))
       sessionStorage.setItem('real_role', data.user.role)
+      return data.user.role as UserRole
     } finally {
       setLoading(false)
     }
