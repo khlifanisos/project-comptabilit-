@@ -10,7 +10,10 @@ const api = axios.create({
   baseURL,
   headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
   withCredentials: true,
-  timeout: 5000,
+  // 5s was too tight for local dev: php artisan serve handles one request at a
+  // time, and heavy CPU load elsewhere (e.g. screen-share video encoding) can
+  // push a normal request past that and trigger a false "failed to load".
+  timeout: 20000,
 })
 
 api.interceptors.request.use((config) => {
