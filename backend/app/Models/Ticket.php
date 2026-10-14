@@ -9,8 +9,8 @@ class Ticket extends Model
     protected $table = 'tickets';
 
     protected $fillable = [
-        'titre', 'description', 'created_by', 'assigned_to',
-        'statut', 'priorite', 'date_echeance',
+        'titre', 'description', 'created_by', 'assigned_to', 'client_id',
+        'statut', 'priorite', 'date_echeance', 'facture',
         'commentaire_validation', 'submitted_at', 'reviewed_at',
     ];
 
@@ -18,6 +18,7 @@ class Ticket extends Model
         'date_echeance' => 'date',
         'submitted_at'  => 'datetime',
         'reviewed_at'   => 'datetime',
+        'facture'       => 'boolean',
     ];
 
     public function creator()
@@ -28,6 +29,11 @@ class Ticket extends Model
     public function assignee()
     {
         return $this->belongsTo(Administrateur::class, 'assigned_to');
+    }
+
+    public function client()
+    {
+        return $this->belongsTo(Client::class);
     }
 
     public function attachments()

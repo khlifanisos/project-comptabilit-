@@ -11,6 +11,7 @@ use App\Http\Controllers\DeclarationFiscaleController;
 use App\Http\Controllers\DeclarationSocialeController;
 use App\Http\Controllers\EcheancierLeasingController;
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\AuditBalanceController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\InvoiceAnalysisController;
 use App\Http\Controllers\ExcelExportController;
@@ -134,9 +135,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/audit', [AuditController::class, 'index']);
     Route::get('/audit/ai-summary', [AuditController::class, 'aiSummary']);
 
+    // Consolidation des balances (N / N-1 / grand livre) — portage web de la macro VBA
+    Route::get('/audit/balances',               [AuditBalanceController::class, 'index']);
+    Route::post('/audit/balances/{type}',       [AuditBalanceController::class, 'upload']);
+    Route::delete('/audit/balances/{type}',     [AuditBalanceController::class, 'destroy']);
+    Route::get('/audit/balances-export',        [AuditBalanceController::class, 'exportConsolidation']);
+
     // Tickets (super admin assigne, admin exécute, super admin valide)
     Route::get('/tickets',                  [TicketController::class, 'index']);
     Route::get('/tickets/assignable-admins', [TicketController::class, 'assignableAdmins']);
+    Route::get('/tickets/assignable-clients', [TicketController::class, 'assignableClients']);
     Route::post('/tickets',                 [TicketController::class, 'store']);
     Route::put('/tickets/{id}',             [TicketController::class, 'update']);
     Route::delete('/tickets/{id}',          [TicketController::class, 'destroy']);
@@ -144,6 +152,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/tickets/{id}/submit',     [TicketController::class, 'submit']);
     Route::post('/tickets/{id}/validate',   [TicketController::class, 'validateTicket']);
     Route::post('/tickets/{id}/reject',     [TicketController::class, 'reject']);
+    Route::post('/tickets/{id}/facture',    [TicketController::class, 'toggleFacture']);
     Route::post('/tickets/{id}/attachments',                    [TicketController::class, 'uploadAttachment']);
     Route::get('/tickets/{id}/attachments/{attachmentId}/fichier', [TicketController::class, 'downloadAttachment']);
     Route::delete('/tickets/{id}/attachments/{attachmentId}',   [TicketController::class, 'deleteAttachment']);

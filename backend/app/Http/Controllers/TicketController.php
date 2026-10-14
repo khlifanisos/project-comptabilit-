@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Administrateur;
+use App\Models\Client;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ class TicketController extends Controller
     private const WITH = [
         'creator:id,nom,email,avatar,entreprise',
         'assignee:id,nom,email,avatar,entreprise',
+        'client:id,nom,email,entreprise',
         'attachments.uploader:id,nom,email,avatar',
     ];
 
@@ -70,6 +72,19 @@ class TicketController extends Controller
         return response()->json($admins);
     }
 
+    /** Clients a ticket can be linked to — every client on the platform, same cross-cabinet scope as assignableAdmins. */
+    public function assignableClients(Request $request)
+    {
+        $admin = $request->user();
+        if (!$admin->is_super_admin) {
+            return response()->json(['message' => 'Accès réservé au super admin.'], 403);
+        }
+
+        $clients = Client::orderBy('nom')->get(['id', 'nom', 'email', 'entreprise']);
+
+        return response()->json($clients);
+    }
+
     public function store(Request $request)
     {
         $admin = $request->user();
@@ -81,8 +96,10 @@ class TicketController extends Controller
             'titre'         => 'required|string|max:200',
             'description'   => 'nullable|string|max:3000',
             'assigned_to'   => 'required|integer',
+            'client_id'     => 'nullable|integer',
             'priorite'      => 'nullable|in:basse,normale,haute,urgente',
             'date_echeance' => 'nullable|date',
+            'facture'       => 'nullable|boolean',
             'fichiers'      => 'nullable|array|max:10',
             'fichiers.*'    => 'file|mimes:pdf,jpg,jpeg,png,webp,gif|max:10240',
         ]);
@@ -92,13 +109,19 @@ class TicketController extends Controller
             return response()->json(['message' => 'Admin introuvable.'], 422);
         }
 
+        if (!empty($validated['client_id']) && !Client::find($validated['client_id'])) {
+            return response()->json(['message' => 'Client introuvable.'], 422);
+        }
+
         $ticket = Ticket::create([
             'titre'         => $validated['titre'],
             'description'   => $validated['description'] ?? null,
             'created_by'    => $admin->id,
             'assigned_to'   => $assignee->id,
+            'client_id'     => $validated['client_id'] ?? null,
             'priorite'      => $validated['priorite'] ?? 'normale',
             'date_echeance' => $validated['date_echeance'] ?? null,
+            'facture'       => $request->boolean('facture'),
             'statut'        => 'a_faire',
         ]);
 
@@ -179,15 +202,35 @@ class TicketController extends Controller
             'titre'         => 'sometimes|string|max:200',
             'description'   => 'nullable|string|max:3000',
             'assigned_to'   => 'sometimes|integer',
+            'client_id'     => 'nullable|integer',
             'priorite'      => 'sometimes|in:basse,normale,haute,urgente',
             'date_echeance' => 'nullable|date',
+            'facture'       => 'sometimes|boolean',
         ]);
 
         if (isset($validated['assigned_to']) && !Administrateur::find($validated['assigned_to'])) {
             return response()->json(['message' => 'Admin introuvable.'], 422);
         }
+        if (!empty($validated['client_id']) && !Client::find($validated['client_id'])) {
+            return response()->json(['message' => 'Client introuvable.'], 422);
+        }
 
         $ticket->update($validated);
+        return response()->json($ticket->load(self::WITH));
+    }
+
+    /** Toggles the billed/not-billed flag — open to the creator, the assignee, or a super admin. */
+    public function toggleFacture(Request $request, int $id)
+    {
+        $admin  = $request->user();
+        $ticket = Ticket::findOrFail($id);
+
+        if (!$this->canAccess($admin, $ticket)) {
+            return response()->json(['message' => 'Accès non autorisé.'], 403);
+        }
+
+        $ticket->update(['facture' => !$ticket->facture]);
+
         return response()->json($ticket->load(self::WITH));
     }
 

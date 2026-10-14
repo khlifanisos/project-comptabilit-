@@ -5,6 +5,7 @@ import {
   TableCell, TableHead, TableRow, Chip, IconButton, Tooltip, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
   Grid, Avatar, Divider, FormControl, InputLabel, Select,
+  ToggleButtonGroup, ToggleButton,
 } from '@mui/material'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import AddIcon              from '@mui/icons-material/Add'
@@ -20,6 +21,8 @@ import AttachFileIcon       from '@mui/icons-material/AttachFile'
 import DownloadIcon         from '@mui/icons-material/Download'
 import InsertDriveFileIcon  from '@mui/icons-material/InsertDriveFile'
 import ImageIcon            from '@mui/icons-material/Image'
+import ReceiptLongIcon      from '@mui/icons-material/ReceiptLong'
+import PersonOutlineIcon    from '@mui/icons-material/PersonOutline'
 import toast from 'react-hot-toast'
 import api from '../../api/axios'
 import { useAuth } from '../../contexts/AuthContext'
@@ -28,6 +31,7 @@ type Statut = 'a_faire' | 'en_cours' | 'en_attente_validation' | 'valide' | 'rej
 type Priorite = 'basse' | 'normale' | 'haute' | 'urgente'
 
 interface AdminRef { id: number; nom: string; email: string; avatar: string | null; entreprise?: string | null }
+interface ClientRef { id: number; nom: string; email: string; entreprise?: string | null }
 
 interface TicketAttachment {
   id: number
@@ -52,6 +56,8 @@ interface TicketRow {
   created_at: string
   creator: AdminRef
   assignee: AdminRef
+  client: ClientRef | null
+  facture: boolean
   attachments: TicketAttachment[]
 }
 
@@ -81,7 +87,8 @@ const PRIORITE_MAP: Record<Priorite, { label: string; color: string }> = {
 }
 
 const emptyCreateForm = {
-  titre: '', description: '', assigned_to: '' as number | '', priorite: 'normale' as Priorite, date_echeance: '',
+  titre: '', description: '', assigned_to: '' as number | '', client_id: '' as number | '',
+  priorite: 'normale' as Priorite, date_echeance: '', facture: false,
 }
 
 export default function AdminTickets() {
@@ -93,6 +100,7 @@ export default function AdminTickets() {
   const [statutFilter, setStatutFilter] = useState<Statut | ''>('')
 
   const [assignableAdmins, setAssignableAdmins] = useState<AdminRef[]>([])
+  const [assignableClients, setAssignableClients] = useState<ClientRef[]>([])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -108,6 +116,9 @@ export default function AdminTickets() {
     if (!isSuperAdmin) return
     api.get('/tickets/assignable-admins')
       .then((r: { data: AdminRef[] }) => setAssignableAdmins(r.data))
+      .catch(() => {})
+    api.get('/tickets/assignable-clients')
+      .then((r: { data: ClientRef[] }) => setAssignableClients(r.data))
       .catch(() => {})
   }, [isSuperAdmin])
 
@@ -147,8 +158,10 @@ export default function AdminTickets() {
       fd.append('titre', createForm.titre.trim())
       if (createForm.description.trim()) fd.append('description', createForm.description.trim())
       fd.append('assigned_to', String(createForm.assigned_to))
+      if (createForm.client_id) fd.append('client_id', String(createForm.client_id))
       fd.append('priorite', createForm.priorite)
       if (createForm.date_echeance) fd.append('date_echeance', createForm.date_echeance)
+      fd.append('facture', createForm.facture ? '1' : '0')
       createFiles.forEach(f => fd.append('fichiers[]', f))
 
       await api.post('/tickets', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
@@ -192,6 +205,17 @@ export default function AdminTickets() {
       await api.post(`/tickets/${t.id}/validate`)
       toast.success('Ticket validé.')
       load()
+    } catch (err: any) { toast.error(err?.response?.data?.message ?? 'Erreur.') }
+    finally { setActioningId(null) }
+  }
+
+  const handleToggleFacture = async (t: TicketRow) => {
+    setActioningId(t.id)
+    try {
+      const { data } = await api.post<TicketRow>(`/tickets/${t.id}/facture`)
+      toast.success(data.facture ? 'Marqué comme facturé.' : 'Marqué comme non facturé.')
+      setTickets(prev => prev.map(x => (x.id === data.id ? data : x)))
+      setViewTarget(prev => (prev && prev.id === data.id ? data : prev))
     } catch (err: any) { toast.error(err?.response?.data?.message ?? 'Erreur.') }
     finally { setActioningId(null) }
   }
@@ -384,9 +408,11 @@ export default function AdminTickets() {
                   <TableRow>
                     <TableCell>Titre</TableCell>
                     <TableCell>{isSuperAdmin ? 'Assigné à' : 'Assigné par'}</TableCell>
+                    <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Client</TableCell>
                     <TableCell>Priorité</TableCell>
                     <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Échéance</TableCell>
                     <TableCell>Statut</TableCell>
+                    <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>Facturation</TableCell>
                     <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
@@ -415,6 +441,16 @@ export default function AdminTickets() {
                             </Box>
                           </Box>
                         </TableCell>
+                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+                          {t.client ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <PersonOutlineIcon sx={{ fontSize: 15, color: '#94A3B8' }} />
+                              <Typography fontSize={12}>{t.client.nom}</Typography>
+                            </Box>
+                          ) : (
+                            <Typography fontSize={12} color="text.secondary">—</Typography>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Chip label={p.label} size="small" sx={{ bgcolor: `${p.color}18`, color: p.color, fontWeight: 700, fontSize: 11 }} />
                         </TableCell>
@@ -423,6 +459,15 @@ export default function AdminTickets() {
                         </TableCell>
                         <TableCell>
                           <Chip label={s.label} size="small" sx={{ bgcolor: s.bg, color: s.color, fontWeight: 700, fontSize: 11 }} />
+                        </TableCell>
+                        <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }} onClick={e => e.stopPropagation()}>
+                          <Chip label={t.facture ? 'Facturée' : 'Non facturée'} size="small"
+                            onClick={() => handleToggleFacture(t)}
+                            icon={<ReceiptLongIcon sx={{ fontSize: 13 }} />}
+                            sx={{
+                              bgcolor: t.facture ? '#E8F5E9' : '#F1F5F9', color: t.facture ? '#2E7D32' : '#64748B',
+                              fontWeight: 700, fontSize: 11, cursor: 'pointer',
+                            }} />
                         </TableCell>
                         <TableCell align="center" sx={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                           <Tooltip title="Voir le détail">
@@ -514,6 +559,17 @@ export default function AdminTickets() {
               </TextField>
             </Grid>
             <Grid item xs={12} sm={6}>
+              <TextField select fullWidth label="Client concerné (optionnel)" value={createForm.client_id}
+                onChange={e => setCreateForm(f => ({ ...f, client_id: e.target.value ? Number(e.target.value) : '' }))}>
+                <MenuItem value="">Aucun</MenuItem>
+                {assignableClients.map(c => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.nom}{c.entreprise ? ` — ${c.entreprise}` : ''} ({c.email})
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField select fullWidth label="Priorité" value={createForm.priorite}
                 onChange={e => setCreateForm(f => ({ ...f, priorite: e.target.value as Priorite }))}>
                 {Object.entries(PRIORITE_MAP).map(([k, v]) => (
@@ -525,6 +581,18 @@ export default function AdminTickets() {
               <TextField fullWidth label="Échéance (optionnel)" type="date" InputLabelProps={{ shrink: true }}
                 value={createForm.date_echeance}
                 onChange={e => setCreateForm(f => ({ ...f, date_echeance: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Typography sx={{ fontSize: 12, color: '#64748B', mb: 0.8, fontWeight: 600 }}>Facturation</Typography>
+              <ToggleButtonGroup value={createForm.facture} exclusive fullWidth size="small"
+                onChange={(_, v) => v !== null && setCreateForm(f => ({ ...f, facture: v }))}>
+                <ToggleButton value={false} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12.5 }}>
+                  Non facturée
+                </ToggleButton>
+                <ToggleButton value={true} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12.5 }}>
+                  Facturée
+                </ToggleButton>
+              </ToggleButtonGroup>
             </Grid>
             <Grid item xs={12}>
               <Button component="label" variant="outlined" startIcon={<AttachFileIcon />}
@@ -600,7 +668,17 @@ export default function AdminTickets() {
                 { label: 'Priorité',   value: <Chip label={PRIORITE_MAP[viewTarget.priorite].label} size="small" sx={{ bgcolor: `${PRIORITE_MAP[viewTarget.priorite].color}18`, color: PRIORITE_MAP[viewTarget.priorite].color, fontWeight: 700 }} /> },
                 { label: 'Assigné à',  value: <Typography fontSize={13} fontWeight={600}>{viewTarget.assignee.nom}</Typography> },
                 { label: 'Créé par',   value: <Typography fontSize={13} fontWeight={600}>{viewTarget.creator.nom}</Typography> },
+                { label: 'Client',     value: <Typography fontSize={13}>{viewTarget.client ? `${viewTarget.client.nom}${viewTarget.client.entreprise ? ` — ${viewTarget.client.entreprise}` : ''}` : '—'}</Typography> },
                 { label: 'Échéance',   value: <Typography fontSize={13}>{viewTarget.date_echeance ? new Date(viewTarget.date_echeance).toLocaleDateString('fr-FR') : '—'}</Typography> },
+                { label: 'Facturation', value: (
+                  <Chip label={viewTarget.facture ? 'Facturée' : 'Non facturée'} size="small"
+                    onClick={() => handleToggleFacture(viewTarget)}
+                    icon={<ReceiptLongIcon sx={{ fontSize: 13 }} />}
+                    sx={{
+                      bgcolor: viewTarget.facture ? '#E8F5E9' : '#F1F5F9', color: viewTarget.facture ? '#2E7D32' : '#64748B',
+                      fontWeight: 700, cursor: 'pointer',
+                    }} />
+                ) },
               ].map(({ label, value }) => (
                 <Box key={label} sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   <Typography fontSize={12} color="text.secondary" sx={{ width: 100, flexShrink: 0 }}>{label}</Typography>

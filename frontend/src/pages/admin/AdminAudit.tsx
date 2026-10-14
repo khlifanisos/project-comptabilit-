@@ -4,6 +4,7 @@ import {
   TableCell, TableHead, TableRow, Chip, CircularProgress,
   Alert, Avatar, LinearProgress, Button, Tooltip, Collapse,
   List, ListItem, ListItemText, Divider, Grid,
+  FormControl, InputLabel, Select, MenuItem,
 } from '@mui/material'
 import SecurityIcon from '@mui/icons-material/Security'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -14,6 +15,10 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import api from '../../api/axios'
+import BalanceConsolidation from '../../components/audit/BalanceConsolidation'
+
+// Temporarily hidden while the audit dashboard is reworked — flip back to true to restore.
+const SHOW_AUDIT_TABLE = false
 
 function ClientAvatar({ email, nom, avatar }: { email: string; nom: string; avatar?: string | null }) {
   const [photo, setPhoto] = useState<string | null>(() =>
@@ -66,6 +71,7 @@ export default function AdminAudit() {
   const [audits, setAudits]   = useState<ClientAudit[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [balanceClientId, setBalanceClientId] = useState<number | ''>('')
 
   const fetchAudits = useCallback(() => {
     setLoading(true)
@@ -76,6 +82,12 @@ export default function AdminAudit() {
   }, [])
 
   useEffect(() => { fetchAudits() }, [fetchAudits])
+
+  useEffect(() => {
+    if (balanceClientId === '' && audits.length > 0) {
+      setBalanceClientId(audits[0].client.id)
+    }
+  }, [audits, balanceClientId])
 
   const avgScore      = audits.length > 0 ? Math.round(audits.reduce((s, a) => s + a.score, 0) / audits.length) : 0
   const critical      = audits.filter(a => a.score < 40).length
@@ -98,14 +110,31 @@ export default function AdminAudit() {
             <Typography color="text.secondary" fontSize={14}>Vue d'ensemble de la santé comptable de tous les clients</Typography>
           </Box>
         </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <FormControl size="small" sx={{ minWidth: 240 }}>
+            <InputLabel>Client</InputLabel>
+            <Select value={balanceClientId} label="Client"
+              onChange={e => setBalanceClientId(e.target.value as number)}>
+              {audits.map(a => (
+                <MenuItem key={a.client.id} value={a.client.id}>
+                  {a.client.nom}{a.client.entreprise ? ` — ${a.client.entreprise}` : ''}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         <Button startIcon={<RefreshIcon />} onClick={fetchAudits} variant="outlined" size="small"
           sx={{ fontWeight: 600, borderRadius: 2, textTransform: 'none' }}>
           Actualiser
         </Button>
+        </Box>
       </Box>
 
+      {balanceClientId !== '' && (
+        <BalanceConsolidation clientId={balanceClientId} />
+      )}
+
       {/* Summary KPIs */}
-      {!loading && audits.length > 0 && (
+      {SHOW_AUDIT_TABLE && !loading && audits.length > 0 && (
         <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
           {[
             { label: 'Score moyen',       value: `${avgScore}/100`,  color: scoreColor(avgScore), bg: scoreBg(avgScore) },
@@ -124,7 +153,7 @@ export default function AdminAudit() {
         </Box>
       )}
 
-      {loading ? (
+      {SHOW_AUDIT_TABLE && (loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
       ) : audits.length === 0 ? (
         <Alert severity="info" sx={{ borderRadius: 3 }}>Aucun client enregistré sur la plateforme.</Alert>
@@ -310,7 +339,7 @@ export default function AdminAudit() {
             </Table>
           </CardContent>
         </Card>
-      )}
+      ))}
     </Box>
   )
 }
