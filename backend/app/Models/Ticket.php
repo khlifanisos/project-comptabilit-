@@ -40,4 +40,10 @@ class Ticket extends Model
     {
         return $this->hasMany(TicketAttachment::class);
     }
+
+    /** The invoice drawn up once the ticket is validated ("facture" is already the billed flag). */
+    public function facturation()
+    {
+        return $this->hasOne(TicketFacture::class);
+    }
 }

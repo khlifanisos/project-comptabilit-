@@ -16,6 +16,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\InvoiceAnalysisController;
 use App\Http\Controllers\ExcelExportController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\TicketFactureController;
 use App\Http\Controllers\AdminDocumentController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\TexteLoiController;
@@ -156,6 +157,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/tickets/{id}/attachments',                    [TicketController::class, 'uploadAttachment']);
     Route::get('/tickets/{id}/attachments/{attachmentId}/fichier', [TicketController::class, 'downloadAttachment']);
     Route::delete('/tickets/{id}/attachments/{attachmentId}',   [TicketController::class, 'deleteAttachment']);
+
+    // Facturation d'un ticket validé (bon d'intervention → PDF)
+    Route::get('/tickets/{id}/facturation',     [TicketFactureController::class, 'show']);
+    Route::post('/tickets/{id}/facturation',    [TicketFactureController::class, 'save']);
+    Route::get('/tickets/{id}/facturation/pdf', [TicketFactureController::class, 'pdf']);
 
     // Fichiers Excel archivés (analyses de factures converties)
     Route::get('/excel-exports',              [ExcelExportController::class, 'index']);

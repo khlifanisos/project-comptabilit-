@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Grid, Button, IconButton,
   CircularProgress, Chip, Table, TableBody, TableCell, TableHead, TableRow,
-  Tooltip,
+  Tooltip, TextField,
 } from '@mui/material'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
@@ -67,6 +67,8 @@ export default function BalanceConsolidation({ clientId }: Props) {
   const [uploading, setUploading] = useState<Record<BalanceType, boolean>>({ n: false, n_1: false, grand_livre: false })
   const [exporting, setExporting] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  // Fiscal year of balance N — labels the columns/sheets like "Solde 2024 / Solde 2025".
+  const [annee, setAnnee] = useState(new Date().getFullYear() - 1)
 
   const fileRefs = {
     n: useRef<HTMLInputElement>(null),
@@ -117,11 +119,11 @@ export default function BalanceConsolidation({ clientId }: Props) {
   const handleExport = async () => {
     setExporting(true)
     try {
-      const res = await api.get('/audit/balances-export', { params: { client_id: clientId }, responseType: 'blob' })
+      const res = await api.get('/audit/balances-export', { params: { client_id: clientId, annee }, responseType: 'blob' })
       const url = window.URL.createObjectURL(res.data)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'consolidation_balances.xlsx'
+      a.download = `Balance_Consolidee_${annee - 1}_${annee}.xlsx`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -215,9 +217,13 @@ export default function BalanceConsolidation({ clientId }: Props) {
                 sx={{ bgcolor: '#E3F0FF', color: '#1565C0', fontWeight: 700 }} />
               <Chip label={`${ecarts.length} écart(s)`} size="small"
                 sx={{ bgcolor: ecarts.length > 0 ? '#FFF3E0' : '#E8F5E9', color: ecarts.length > 0 ? '#E65100' : '#2E7D32', fontWeight: 700 }} />
+              <TextField size="small" type="number" label="Exercice N" value={annee}
+                onChange={e => setAnnee(Number(e.target.value) || new Date().getFullYear() - 1)}
+                inputProps={{ min: 1990, max: 2100 }}
+                sx={{ ml: 'auto', width: 120 }} />
               <Button size="small" variant="outlined" startIcon={exporting ? <CircularProgress size={14} /> : <DownloadIcon />}
                 disabled={exporting} onClick={handleExport}
-                sx={{ ml: 'auto', textTransform: 'none', fontWeight: 600, borderRadius: 2 }}>
+                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}>
                 Télécharger (.xlsx)
               </Button>
             </Box>
@@ -244,8 +250,8 @@ export default function BalanceConsolidation({ clientId }: Props) {
                     <TableRow>
                       <TableCell sx={{ fontWeight: 700 }}>Compte</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Libellé</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>Solde N-1</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>Solde N</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>Solde {annee - 1}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>Solde {annee}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700 }}>Variation</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Statut</TableCell>
                     </TableRow>

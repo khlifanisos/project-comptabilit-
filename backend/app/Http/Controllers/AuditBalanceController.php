@@ -9,7 +9,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -174,10 +176,11 @@ class AuditBalanceController extends Controller
     }
 
     /**
-     * Excel export matching the "Balance_Consolidee_Expert" reference workbook:
-     * one sheet with every account (Compte/Libelle/Solde N-1/Solde N/Variation,
-     * where Variation = Solde N - Solde N-1 — zero when both balances agree),
-     * plus two sheets isolating the accounts found in only one of the balances.
+     * Excel export matching the "Balance_Consolidee_2024_2025_Expert" reference workbook:
+     * - "Balance consolidée": Compte / Libelle / Solde N-1 / Solde N sorted by compte,
+     *   an unlabelled column E holding the live formula =+D-C, and a =SUM total row.
+     * - "Uniquement {N-1}" / "Uniquement {N}": accounts found in only one balance.
+     * Column headers and sheet names carry the fiscal years (?annee=N, default last year).
      */
     public function exportConsolidation(Request $request)
     {
@@ -188,6 +191,9 @@ class AuditBalanceController extends Controller
             return response()->json(['message' => 'Importez la balance N et la balance N-1 avant de générer la consolidation.'], 422);
         }
 
+        $anneeN  = (int) ($request->input('annee') ?: now()->year - 1);
+        $anneeN1 = $anneeN - 1;
+
         ['consolidation' => $consolidation, 'ecarts' => $ecarts] = $this->consolidate(
             $imports['n_1']->lignes()->get(),
             $imports['n']->lignes()->get()
@@ -196,13 +202,16 @@ class AuditBalanceController extends Controller
         $uniquementN1 = array_values(array_filter($ecarts, fn ($r) => $r['statut'] === 'Présent uniquement en N-1'));
         $uniquementN  = array_values(array_filter($ecarts, fn ($r) => $r['statut'] === 'Présent uniquement en N'));
 
+        $headers = ['Compte', 'Libelle', "Solde {$anneeN1}", "Solde {$anneeN}"];
+
         $spreadsheet = new Spreadsheet();
-        $this->writeSheet($spreadsheet->getActiveSheet()->setTitle('Balance consolidée'), $consolidation, true);
-        $this->writeSheet($spreadsheet->createSheet()->setTitle('Uniquement N-1'), $uniquementN1, false);
-        $this->writeSheet($spreadsheet->createSheet()->setTitle('Uniquement N'), $uniquementN, false);
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
+        $this->writeConsolidatedSheet($spreadsheet->getActiveSheet()->setTitle('Balance consolidée'), $headers, $consolidation);
+        $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN1}"), $headers, $uniquementN1);
+        $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN}"), $headers, $uniquementN);
         $spreadsheet->setActiveSheetIndex(0);
 
-        $filename = 'consolidation_balances_' . now()->format('Y-m-d_His') . '.xlsx';
+        $filename = "Balance_Consolidee_{$anneeN1}_{$anneeN}.xlsx";
         $tmp = tempnam(sys_get_temp_dir(), 'conso');
         (new Xlsx($spreadsheet))->save($tmp);
 
@@ -211,41 +220,64 @@ class AuditBalanceController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
-    /** $withVariation adds the "Solde N - Solde N-1" column (E) used on the main sheet only. */
-    private function writeSheet($sheet, array $rows, bool $withVariation): void
+    /** Dark-blue, bold white, centered, thin-bordered header row A1:D1 shared by all three sheets. */
+    private function writeHeader($sheet, array $headers): void
     {
-        $headers = $withVariation
-            ? ['Compte', 'Libelle', 'Solde N-1', 'Solde N', 'Variation']
-            : ['Compte', 'Libelle', 'Solde N-1', 'Solde N'];
-        $lastCol = $withVariation ? 'E' : 'D';
         $sheet->fromArray($headers, null, 'A1');
+        $style = $sheet->getStyle('A1:D1');
+        $style->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+        $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1F4E78');
+        $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_TOP);
+        $style->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    }
 
-        $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
-        $sheet->getStyle("A1:{$lastCol}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1F4E79');
+    private function writeRow($sheet, int $r, array $row): void
+    {
+        // Compte kept as text so long account numbers are not turned into 1.01E+9.
+        $sheet->setCellValueExplicit("A{$r}", $row['compte'], DataType::TYPE_STRING);
+        $sheet->setCellValue("B{$r}", $row['libelle']);
+        $sheet->setCellValue("C{$r}", $row['solde_n_1']);
+        $sheet->setCellValue("D{$r}", $row['solde_n']);
+    }
+
+    private function writeConsolidatedSheet($sheet, array $headers, array $rows): void
+    {
+        $this->writeHeader($sheet, $headers);
 
         $r = 2;
         foreach ($rows as $row) {
-            $sheet->setCellValue("A{$r}", $row['compte']);
-            $sheet->setCellValue("B{$r}", $row['libelle']);
-            $sheet->setCellValue("C{$r}", $row['solde_n_1']);
-            $sheet->setCellValue("D{$r}", $row['solde_n']);
-            if ($withVariation) {
-                $sheet->setCellValue("E{$r}", $row['variation']);
-            }
+            $this->writeRow($sheet, $r, $row);
+            $sheet->setCellValue("E{$r}", "=+D{$r}-C{$r}");
             $r++;
         }
+        $last  = $r - 1;
+        $total = $r;
 
-        $last = $r - 1;
         if ($last >= 2) {
-            $numCols = $withVariation ? "C2:E{$last}" : "C2:D{$last}";
-            $sheet->getStyle($numCols)->getNumberFormat()->setFormatCode('#,##0.000;[Red](#,##0.000);-');
-            $sheet->getStyle("A1:{$lastCol}{$last}")->getBorders()->getAllBorders()
-                ->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('DCDCDC');
+            $sheet->getStyle("A2:D{$last}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            $sheet->getStyle("C2:E{$last}")->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->setCellValue("C{$total}", "=SUM(C2:C{$last})");
+            $sheet->setCellValue("D{$total}", "=SUM(D2:D{$last})");
+            $sheet->getStyle("C{$total}:D{$total}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            $sheet->getStyle("C{$total}:D{$total}")->getNumberFormat()->setFormatCode('#,##0.00');
         }
-        foreach (range('A', $lastCol) as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
+
+        $sheet->getColumnDimension('A')->setWidth(25);
+        $sheet->getColumnDimension('B')->setWidth(34.11);
+        $sheet->getColumnDimension('C')->setWidth(25);
+        $sheet->getColumnDimension('E')->setWidth(12);
+    }
+
+    private function writeUniquementSheet($sheet, array $headers, array $rows): void
+    {
+        $this->writeHeader($sheet, $headers);
+
+        $r = 2;
+        foreach ($rows as $row) {
+            $this->writeRow($sheet, $r++, $row);
         }
-        $sheet->setAutoFilter("A1:{$lastCol}1");
+
+        $sheet->getColumnDimension('A')->setWidth(25);
     }
 
     /**
@@ -296,6 +328,8 @@ class AuditBalanceController extends Controller
                 'statut'    => $statut,
             ];
         }
+
+        usort($consolidation, fn ($a, $b) => strcmp($a['compte'], $b['compte']));
 
         $ecarts = array_values(array_filter(
             $consolidation,

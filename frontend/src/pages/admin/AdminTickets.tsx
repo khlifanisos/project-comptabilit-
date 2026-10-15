@@ -26,6 +26,8 @@ import PersonOutlineIcon    from '@mui/icons-material/PersonOutline'
 import toast from 'react-hot-toast'
 import api from '../../api/axios'
 import { useAuth } from '../../contexts/AuthContext'
+import TicketFactureDialog from '../../components/admin/TicketFactureDialog'
+import type { FactureSummary } from '../../components/admin/TicketFactureDialog'
 
 type Statut = 'a_faire' | 'en_cours' | 'en_attente_validation' | 'valide' | 'rejete'
 type Priorite = 'basse' | 'normale' | 'haute' | 'urgente'
@@ -58,6 +60,7 @@ interface TicketRow {
   assignee: AdminRef
   client: ClientRef | null
   facture: boolean
+  facturation: FactureSummary | null
   attachments: TicketAttachment[]
 }
 
@@ -326,6 +329,11 @@ export default function AdminTickets() {
     }
   }
 
+  // ── Facturation dialog (validated tickets) ────────────────────────────────
+  const [factureTicketId, setFactureTicketId] = useState<number | null>(null)
+  const closeFacture = useCallback(() => setFactureTicketId(null), [])
+  const handleFactureSaved = useCallback(() => { load() }, [load])
+
   const filtered = statutFilter ? tickets.filter(t => t.statut === statutFilter) : tickets
   const pendingReview = tickets.filter(t => t.statut === 'en_attente_validation').length
 
@@ -512,6 +520,17 @@ export default function AdminTickets() {
                                 </IconButton>
                               </Tooltip>
                             </>
+                          )}
+                          {t.statut === 'valide' && (
+                            <Tooltip title={t.facturation ? `Facture ${t.facturation.numero}` : 'Procéder vers la facturation'}>
+                              <Button size="small" variant={t.facturation ? 'outlined' : 'contained'}
+                                startIcon={<ReceiptLongIcon sx={{ fontSize: 15 }} />}
+                                onClick={() => setFactureTicketId(t.id)}
+                                sx={{ ml: 0.5, textTransform: 'none', fontSize: 11.5, fontWeight: 700, borderRadius: 2, py: 0.25,
+                                  ...(t.facturation ? { color: '#2E7D32', borderColor: '#A5D6A7' } : { bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }) }}>
+                                {t.facturation ? 'Facture' : 'Facturer'}
+                              </Button>
+                            </Tooltip>
                           )}
                           {isSuperAdmin && (
                             <Tooltip title="Supprimer">
@@ -753,9 +772,18 @@ export default function AdminTickets() {
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 1.5 }}>
+          {viewTarget?.statut === 'valide' && (
+            <Button variant="contained" startIcon={<ReceiptLongIcon />}
+              onClick={() => { const id = viewTarget.id; setViewTarget(null); setFactureTicketId(id) }}
+              sx={{ textTransform: 'none', fontWeight: 700, bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }}>
+              {viewTarget.facturation ? `Voir la facture ${viewTarget.facturation.numero}` : 'Procéder vers la facturation'}
+            </Button>
+          )}
           <Button onClick={() => setViewTarget(null)} color="inherit">Fermer</Button>
         </DialogActions>
       </Dialog>
+
+      <TicketFactureDialog ticketId={factureTicketId} onClose={closeFacture} onSaved={handleFactureSaved} />
     </Box>
   )
 }

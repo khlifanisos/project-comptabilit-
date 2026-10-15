@@ -16,6 +16,7 @@ class TicketController extends Controller
         'assignee:id,nom,email,avatar,entreprise',
         'client:id,nom,email,entreprise',
         'attachments.uploader:id,nom,email,avatar',
+        'facturation:id,ticket_id,numero,statut,net_facture',
     ];
 
     private function canAccess(Administrateur $admin, Ticket $ticket): bool
