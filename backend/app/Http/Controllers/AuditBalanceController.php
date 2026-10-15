@@ -173,7 +173,12 @@ class AuditBalanceController extends Controller
         return response()->json(['message' => 'Import supprimé.']);
     }
 
-    /** Excel export of the Consolidation + Ecarts sheets, styled like the macro's MettreEnForme. */
+    /**
+     * Excel export matching the "Balance_Consolidee_Expert" reference workbook:
+     * one sheet with every account (Compte/Libelle/Solde N-1/Solde N/Variation,
+     * where Variation = Solde N - Solde N-1 — zero when both balances agree),
+     * plus two sheets isolating the accounts found in only one of the balances.
+     */
     public function exportConsolidation(Request $request)
     {
         $clientId = $this->resolveClientId($request);
@@ -188,9 +193,13 @@ class AuditBalanceController extends Controller
             $imports['n']->lignes()->get()
         );
 
+        $uniquementN1 = array_values(array_filter($ecarts, fn ($r) => $r['statut'] === 'Présent uniquement en N-1'));
+        $uniquementN  = array_values(array_filter($ecarts, fn ($r) => $r['statut'] === 'Présent uniquement en N'));
+
         $spreadsheet = new Spreadsheet();
-        $this->writeSheet($spreadsheet->getActiveSheet()->setTitle('Consolidation'), $consolidation);
-        $this->writeSheet($spreadsheet->createSheet()->setTitle('Ecarts'), $ecarts);
+        $this->writeSheet($spreadsheet->getActiveSheet()->setTitle('Balance consolidée'), $consolidation, true);
+        $this->writeSheet($spreadsheet->createSheet()->setTitle('Uniquement N-1'), $uniquementN1, false);
+        $this->writeSheet($spreadsheet->createSheet()->setTitle('Uniquement N'), $uniquementN, false);
         $spreadsheet->setActiveSheetIndex(0);
 
         $filename = 'consolidation_balances_' . now()->format('Y-m-d_His') . '.xlsx';
@@ -202,13 +211,17 @@ class AuditBalanceController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
-    private function writeSheet($sheet, array $rows): void
+    /** $withVariation adds the "Solde N - Solde N-1" column (E) used on the main sheet only. */
+    private function writeSheet($sheet, array $rows, bool $withVariation): void
     {
-        $headers = ['Compte', 'Libelle', 'Solde N-1', 'Solde N', 'Variation', 'Statut'];
+        $headers = $withVariation
+            ? ['Compte', 'Libelle', 'Solde N-1', 'Solde N', 'Variation']
+            : ['Compte', 'Libelle', 'Solde N-1', 'Solde N'];
+        $lastCol = $withVariation ? 'E' : 'D';
         $sheet->fromArray($headers, null, 'A1');
 
-        $sheet->getStyle('A1:F1')->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
-        $sheet->getStyle('A1:F1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1F4E79');
+        $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+        $sheet->getStyle("A1:{$lastCol}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1F4E79');
 
         $r = 2;
         foreach ($rows as $row) {
@@ -216,21 +229,23 @@ class AuditBalanceController extends Controller
             $sheet->setCellValue("B{$r}", $row['libelle']);
             $sheet->setCellValue("C{$r}", $row['solde_n_1']);
             $sheet->setCellValue("D{$r}", $row['solde_n']);
-            $sheet->setCellValue("E{$r}", $row['variation']);
-            $sheet->setCellValue("F{$r}", $row['statut']);
+            if ($withVariation) {
+                $sheet->setCellValue("E{$r}", $row['variation']);
+            }
             $r++;
         }
 
         $last = $r - 1;
         if ($last >= 2) {
-            $sheet->getStyle("C2:E{$last}")->getNumberFormat()->setFormatCode('#,##0.000;[Red](#,##0.000);-');
-            $sheet->getStyle("A1:F{$last}")->getBorders()->getAllBorders()
+            $numCols = $withVariation ? "C2:E{$last}" : "C2:D{$last}";
+            $sheet->getStyle($numCols)->getNumberFormat()->setFormatCode('#,##0.000;[Red](#,##0.000);-');
+            $sheet->getStyle("A1:{$lastCol}{$last}")->getBorders()->getAllBorders()
                 ->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('DCDCDC');
         }
-        foreach (range('A', 'F') as $col) {
+        foreach (range('A', $lastCol) as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
-        $sheet->setAutoFilter('A1:F1');
+        $sheet->setAutoFilter("A1:{$lastCol}1");
     }
 
     /**
