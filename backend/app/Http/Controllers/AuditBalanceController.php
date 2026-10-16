@@ -64,13 +64,14 @@ class AuditBalanceController extends Controller
 
     /**
      * Audit section by account prefix: [first 2 digits from, to, section].
-     * Prefixes not listed (and 25–26, 73, 78) get no section.
+     * Prefixes not listed (e.g. 78) get no section.
      */
     private const SECTIONS_AUDIT = [
-        [10, 15, 'R'], [16, 16, 'E'], [21, 24, 'G'], [28, 29, 'G'], [37, 39, 'K'],
-        [40, 40, 'V'], [41, 41, 'L'], [42, 42, 'U'], [43, 43, 'T'], [44, 48, 'M'],
-        [49, 49, 'L'], [50, 58, 'O'], [60, 63, 'V'], [64, 64, 'U'], [65, 65, 'O'],
-        [66, 66, 'T'], [68, 68, 'G'], [69, 69, 'T'], [70, 70, 'L'], [75, 75, 'O'],
+        [10, 15, 'R'], [16, 16, 'E'], [21, 24, 'G'], [25, 26, 'F'], [28, 29, 'G'],
+        [31, 31, 'K'], [37, 39, 'K'], [40, 40, 'V'], [41, 41, 'L'], [42, 42, 'U'],
+        [43, 43, 'T'], [44, 48, 'M'], [49, 49, 'L'], [50, 58, 'O'], [60, 63, 'V'],
+        [64, 64, 'U'], [65, 65, 'O'], [66, 66, 'T'], [68, 68, 'G'], [69, 69, 'T'],
+        [70, 70, 'L'], [73, 73, 'G'], [75, 75, 'O'],
     ];
 
     /** 627… is the one 3-digit exception: inside 60–63 (V) but audited under O. */

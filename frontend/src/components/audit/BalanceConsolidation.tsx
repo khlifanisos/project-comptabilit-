@@ -55,7 +55,7 @@ function formatNumber(n: number): string {
 }
 
 /** Plan-comptable order, same as the "Section X" sheets of the Excel export. */
-const SECTIONS = ['R', 'E', 'G', 'K', 'V', 'L', 'U', 'T', 'M', 'O']
+const SECTIONS = ['R', 'E', 'G', 'F', 'K', 'V', 'L', 'U', 'T', 'M', 'O']
 
 function formatPct(p: number | null): string {
   return p === null ? '—' : `${p.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`
