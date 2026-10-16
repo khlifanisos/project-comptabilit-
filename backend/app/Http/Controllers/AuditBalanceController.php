@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Administrateur;
 use App\Models\AuditBalanceImport;
 use App\Models\AuditBalanceLigne;
+use App\Support\SpreadsheetRowReader;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -35,14 +37,57 @@ class AuditBalanceController extends Controller
     ];
 
     /** Header synonyms (lowercased, trimmed) the macro's TrouverColonne would also accept. */
+    /** Header prefixes (normalized: lowercase, no accents, "_" → space); first matching column wins. */
     private const HEADER_SYNONYMS = [
         'compte'  => ['compte', 'n° compte', 'numero de compte', 'code compte'],
-        'libelle' => ['libelle', 'libellé', 'intitule', 'intitulé'],
-        'solde'   => ['solde'],
+        'libelle' => ['libelle', 'intitule'],
+        // Account name ("designat" in grand livre exports) — preferred over the entry's "libelle".
+        'designation' => ['designat'],
         'date'    => ['date', "date d'operation", 'date operation', 'date piece'],
-        'debit'   => ['debit', 'débit'],
-        'credit'  => ['credit', 'crédit'],
     ];
+
+    /**
+     * Amount columns are matched exactly, not by prefix: grand livre exports
+     * carry "solde_d"/"solde_c" and "debiteur"/"crediteur" next to the real
+     * "debit"/"credit", and a prefix match would pick the wrong one.
+     */
+    private const HEADER_PATTERNS = [
+        'solde'   => '/^solde( (n|n-1|n 1|\d{4}|final|fin|net|cloture))?$/',
+        'solde_d' => '/^solde (d|deb|debit|debiteur)$/',
+        'solde_c' => '/^solde (c|cred|credit|crediteur)$/',
+        // Opening balance: balance exports with "solde_ini / debit / credit" give the
+        // year's movements only, so the closing balance is solde_ini + debit − credit.
+        'solde_ini' => "/^(solde (ini|init|initial|ouverture|d'ouverture|anterieur|a nouveau)|report|a nouveau)$/",
+        'debit'   => '/^(total |mouvements? |mvt )?debits?( \d{4})?$/',
+        'credit'  => '/^(total |mouvements? |mvt )?credits?( \d{4})?$/',
+    ];
+
+    /**
+     * Audit section by account prefix: [first 2 digits from, to, section].
+     * Prefixes not listed (and 25–26, 73, 78) get no section.
+     */
+    private const SECTIONS_AUDIT = [
+        [10, 15, 'R'], [16, 16, 'E'], [21, 24, 'G'], [28, 29, 'G'], [37, 39, 'K'],
+        [40, 40, 'V'], [41, 41, 'L'], [42, 42, 'U'], [43, 43, 'T'], [44, 48, 'M'],
+        [49, 49, 'L'], [50, 58, 'O'], [60, 63, 'V'], [64, 64, 'U'], [65, 65, 'O'],
+        [66, 66, 'T'], [68, 68, 'G'], [69, 69, 'T'], [70, 70, 'L'], [75, 75, 'O'],
+    ];
+
+    /** 627… is the one 3-digit exception: inside 60–63 (V) but audited under O. */
+    public static function sectionAudit(string $compte): string
+    {
+        $compte = trim($compte);
+        if (str_starts_with($compte, '627')) {
+            return 'O';
+        }
+        $prefix = (int) substr($compte, 0, 2);
+        foreach (self::SECTIONS_AUDIT as [$from, $to, $section]) {
+            if ($prefix >= $from && $prefix <= $to) {
+                return $section;
+            }
+        }
+        return '';
+    }
 
     private function resolveClientId(Request $request): ?int
     {
@@ -99,7 +144,8 @@ class AuditBalanceController extends Controller
         $this->assertType($type);
 
         $request->validate([
-            'fichier' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+            // A full grand livre easily weighs 10–20 MB.
+            'fichier' => 'required|file|mimes:xlsx,xls,csv,txt|max:51200',
         ]);
 
         $clientId = $this->resolveClientId($request);
@@ -109,48 +155,81 @@ class AuditBalanceController extends Controller
 
         /** @var UploadedFile $file */
         $file = $request->file('fichier');
+        $need = $type === 'grand_livre' ? 'Compte' : 'Compte et Solde';
 
         try {
-            $parsed = $this->parseBalanceFile($file, $type);
+            $rows = $this->balanceRows($file->getRealPath(), $type);
         } catch (\Throwable $e) {
-            return response()->json([
-                'message' => "Impossible de lire ce fichier : " . $e->getMessage(),
-            ], 422);
+            return response()->json(['message' => "Impossible de lire ce fichier : " . $e->getMessage()], 422);
         }
-
-        if (empty($parsed['rows'])) {
-            $need = $type === 'grand_livre' ? 'Compte' : 'Compte et Solde';
+        if ($rows === null) {
             return response()->json([
-                'message' => "Colonnes obligatoires introuvables ou fichier vide. Vérifiez les en-têtes : {$need}.",
+                'message' => "Colonnes obligatoires introuvables. Vérifiez les en-têtes : {$need}.",
             ], 422);
         }
 
         $path = $file->store("audit_balances/{$clientId}/{$type}", 'public');
+        $previous = AuditBalanceImport::where('client_id', $clientId)->where('type', $type)->value('fichier');
 
-        $import = AuditBalanceImport::updateOrCreate(
-            ['client_id' => $clientId, 'type' => $type],
-            [
-                'nom_fichier' => $file->getClientOriginalName(),
-                'fichier'     => $path,
-                'nb_lignes'   => count($parsed['rows']),
-            ]
-        );
+        // Rows are streamed from the file straight into the table in batches, so a
+        // 300 000-line grand livre never sits in memory. Any failure (or an empty
+        // file) rolls back and leaves the previous import untouched.
+        try {
+            [$import, $count] = DB::transaction(function () use ($rows, $clientId, $type, $file, $path) {
+                $import = AuditBalanceImport::updateOrCreate(
+                    ['client_id' => $clientId, 'type' => $type],
+                    ['nom_fichier' => $file->getClientOriginalName(), 'fichier' => $path, 'nb_lignes' => 0]
+                );
+                // Replace previous rows (re-upload overwrites, matching the macro's wsC.Cells.Clear reset).
+                $import->lignes()->delete();
 
-        // Replace previous rows (re-upload overwrites, matching the macro's wsC.Cells.Clear reset).
-        $import->lignes()->delete();
-        foreach (array_chunk($parsed['rows'], 500) as $chunk) {
-            $import->lignes()->createMany(array_map(fn ($r) => [
-                'compte'         => $r['compte'],
-                'libelle'        => $r['libelle'] ?? null,
-                'solde'          => $r['solde'] ?? null,
-                'date_operation' => $r['date'] ?? null,
-                'debit'          => $r['debit'] ?? null,
-                'credit'         => $r['credit'] ?? null,
-            ], $chunk));
+                $now = now();
+                $count = 0;
+                $batch = [];
+                foreach ($rows as $r) {
+                    $batch[] = [
+                        'import_id'      => $import->id,
+                        'compte'         => mb_substr($r['compte'], 0, 255),
+                        'libelle'        => $r['libelle'] !== null ? mb_substr($r['libelle'], 0, 255) : null,
+                        'solde'          => $r['solde'],
+                        'date_operation' => $r['date'],
+                        'debit'          => $r['debit'],
+                        'credit'         => $r['credit'],
+                        'created_at'     => $now,
+                        'updated_at'     => $now,
+                    ];
+                    if (count($batch) === 1000) {
+                        DB::table('audit_balance_lignes')->insert($batch);
+                        $count += count($batch);
+                        $batch = [];
+                    }
+                }
+                if ($batch) {
+                    DB::table('audit_balance_lignes')->insert($batch);
+                    $count += count($batch);
+                }
+                if ($count === 0) {
+                    throw new \RuntimeException('EMPTY');
+                }
+
+                $import->update(['nb_lignes' => $count]);
+                return [$import, $count];
+            });
+        } catch (\Throwable $e) {
+            Storage::disk('public')->delete($path);
+            return response()->json([
+                'message' => $e->getMessage() === 'EMPTY'
+                    ? "Aucune ligne exploitable dans ce fichier. Vérifiez les en-têtes : {$need}."
+                    : "Impossible de lire ce fichier : " . $e->getMessage(),
+            ], 422);
+        }
+
+        if ($previous && $previous !== $path) {
+            Storage::disk('public')->delete($previous);
         }
 
         return response()->json([
-            'message' => self::LABELS[$type] . ' importée (' . count($parsed['rows']) . ' lignes).',
+            'message' => self::LABELS[$type] . ' importée (' . number_format($count, 0, ',', ' ') . ' lignes).',
             'import'  => [
                 'id'          => $import->id,
                 'label'       => self::LABELS[$type],
@@ -178,9 +257,12 @@ class AuditBalanceController extends Controller
     /**
      * Excel export matching the "Balance_Consolidee_2024_2025_Expert" reference workbook:
      * - "Balance consolidée": Compte / Libelle / Solde N-1 / Solde N sorted by compte,
-     *   an unlabelled column E holding the live formula =+D-C, and a =SUM total row.
+     *   then Variation (=D-C), Variation % (=Variation / Solde N-1) and Section audit
+     *   (letter derived from the account prefix, see SECTIONS_AUDIT). No total row.
      * - "Uniquement {N-1}" / "Uniquement {N}": accounts found in only one balance.
+     * - "Section X": one sheet per audit section; the letters in column G link to them.
      * Column headers and sheet names carry the fiscal years (?annee=N, default last year).
+     * ?section=T exports only that section's sheet.
      */
     public function exportConsolidation(Request $request)
     {
@@ -203,15 +285,38 @@ class AuditBalanceController extends Controller
         $uniquementN  = array_values(array_filter($ecarts, fn ($r) => $r['statut'] === 'Présent uniquement en N'));
 
         $headers = ['Compte', 'Libelle', "Solde {$anneeN1}", "Solde {$anneeN}"];
+        $sectionHeaders = [...$headers, 'Variation', 'Variation %'];
 
         $spreadsheet = new Spreadsheet();
         $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
-        $this->writeConsolidatedSheet($spreadsheet->getActiveSheet()->setTitle('Balance consolidée'), $headers, $consolidation);
-        $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN1}"), $headers, $uniquementN1);
-        $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN}"), $headers, $uniquementN);
+
+        $section = strtoupper(trim((string) $request->input('section', '')));
+        if ($section !== '') {
+            $rows = array_values(array_filter($consolidation, fn ($r) => $r['section'] === $section));
+            $this->writeConsolidatedSheet($spreadsheet->getActiveSheet()->setTitle("Section {$section}"), $sectionHeaders, $rows);
+            $filename = "Section_{$section}_{$anneeN1}_{$anneeN}.xlsx";
+        } else {
+            $this->writeConsolidatedSheet($spreadsheet->getActiveSheet()->setTitle('Balance consolidée'),
+                [...$headers, 'Variation', 'Variation %', 'Section audit'], $consolidation);
+            $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN1}"), $headers, $uniquementN1);
+            $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN}"), $headers, $uniquementN);
+
+            foreach (self::sectionsOrdonnees() as $lettre) {
+                $rows = array_values(array_filter($consolidation, fn ($r) => $r['section'] === $lettre));
+                if (!$rows) continue;
+                $sheet = $spreadsheet->createSheet()->setTitle("Section {$lettre}");
+                $this->writeConsolidatedSheet($sheet, $sectionHeaders, $rows);
+                // Way back to the main sheet, next to the table.
+                $sheet->setCellValue('H1', '← Balance consolidée');
+                $sheet->getCell('H1')->getHyperlink()->setUrl("sheet://'Balance consolidée'!A1");
+                $sheet->getStyle('H1')->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+                $sheet->getColumnDimension('H')->setWidth(24);
+            }
+            $this->linkSections($spreadsheet->getSheet(0), $spreadsheet);
+            $filename = "Balance_Consolidee_{$anneeN1}_{$anneeN}.xlsx";
+        }
         $spreadsheet->setActiveSheetIndex(0);
 
-        $filename = "Balance_Consolidee_{$anneeN1}_{$anneeN}.xlsx";
         $tmp = tempnam(sys_get_temp_dir(), 'conso');
         (new Xlsx($spreadsheet))->save($tmp);
 
@@ -220,11 +325,12 @@ class AuditBalanceController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
-    /** Dark-blue, bold white, centered, thin-bordered header row A1:D1 shared by all three sheets. */
+    /** Dark-blue, bold white, centered, thin-bordered header row shared by all three sheets. */
     private function writeHeader($sheet, array $headers): void
     {
         $sheet->fromArray($headers, null, 'A1');
-        $style = $sheet->getStyle('A1:D1');
+        $lastCol = chr(ord('A') + count($headers) - 1);
+        $style = $sheet->getStyle("A1:{$lastCol}1");
         $style->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
         $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1F4E78');
         $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_TOP);
@@ -243,29 +349,62 @@ class AuditBalanceController extends Controller
     private function writeConsolidatedSheet($sheet, array $headers, array $rows): void
     {
         $this->writeHeader($sheet, $headers);
+        $withSection = count($headers) > 6;
 
         $r = 2;
         foreach ($rows as $row) {
             $this->writeRow($sheet, $r, $row);
             $sheet->setCellValue("E{$r}", "=+D{$r}-C{$r}");
+            // Always shown as a positive rate; blank instead of #DIV/0! when N-1 is zero.
+            $sheet->setCellValue("F{$r}", "=IF(C{$r}=0,\"\",ABS(E{$r}/C{$r}))");
+            if ($withSection) {
+                $sheet->setCellValue("G{$r}", $row['section']);
+            }
             $r++;
         }
-        $last  = $r - 1;
-        $total = $r;
+        $last = $r - 1;
+        $lastCol = $withSection ? 'G' : 'F';
 
         if ($last >= 2) {
-            $sheet->getStyle("A2:D{$last}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            $sheet->getStyle("A2:{$lastCol}{$last}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
             $sheet->getStyle("C2:E{$last}")->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->setCellValue("C{$total}", "=SUM(C2:C{$last})");
-            $sheet->setCellValue("D{$total}", "=SUM(D2:D{$last})");
-            $sheet->getStyle("C{$total}:D{$total}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-            $sheet->getStyle("C{$total}:D{$total}")->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle("F2:F{$last}")->getNumberFormat()->setFormatCode('0.00%');
+            if ($withSection) {
+                $sheet->getStyle("G2:G{$last}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("G2:G{$last}")->getFont()->setBold(true);
+            }
         }
 
+        $this->setWidths($sheet);
+        $sheet->getColumnDimension('E')->setWidth(18);
+        $sheet->getColumnDimension('F')->setWidth(14);
+        $sheet->getColumnDimension('G')->setWidth(14);
+    }
+
+    /** Section letters in the order they appear in the plan comptable (R, E, G, K, V, …), without duplicates. */
+    public static function sectionsOrdonnees(): array
+    {
+        return array_values(array_unique(array_column(self::SECTIONS_AUDIT, 2)));
+    }
+
+    /** Turns each letter of the main sheet's "Section audit" column into a link to its "Section X" sheet. */
+    private function linkSections($sheet, Spreadsheet $spreadsheet): void
+    {
+        for ($r = 2; $r <= $sheet->getHighestRow(); $r++) {
+            $lettre = (string) $sheet->getCell("G{$r}")->getValue();
+            if ($lettre === '' || !$spreadsheet->sheetNameExists("Section {$lettre}")) continue;
+            $sheet->getCell("G{$r}")->getHyperlink()->setUrl("sheet://'Section {$lettre}'!A1")->setTooltip("Voir la section {$lettre}");
+            $sheet->getStyle("G{$r}")->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+        }
+    }
+
+    /** Wide enough for amounts like -4,461,532.00 — a default-width column shows "#######". */
+    private function setWidths($sheet): void
+    {
         $sheet->getColumnDimension('A')->setWidth(25);
         $sheet->getColumnDimension('B')->setWidth(34.11);
         $sheet->getColumnDimension('C')->setWidth(25);
-        $sheet->getColumnDimension('E')->setWidth(12);
+        $sheet->getColumnDimension('D')->setWidth(25);
     }
 
     private function writeUniquementSheet($sheet, array $headers, array $rows): void
@@ -276,8 +415,11 @@ class AuditBalanceController extends Controller
         foreach ($rows as $row) {
             $this->writeRow($sheet, $r++, $row);
         }
+        if ($r > 2) {
+            $sheet->getStyle('C2:D' . ($r - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+        }
 
-        $sheet->getColumnDimension('A')->setWidth(25);
+        $this->setWidths($sheet);
     }
 
     /**
@@ -320,11 +462,15 @@ class AuditBalanceController extends Controller
             }
 
             $consolidation[] = [
-                'compte'    => $compte,
+                // Numeric-looking keys come back from PHP arrays as ints; keep the text form.
+                'compte'    => (string) $compte,
                 'libelle'   => $d['libelle'],
                 'solde_n_1' => $soldeN1,
                 'solde_n'   => $soldeN,
                 'variation' => round($soldeN - $soldeN1, 3),
+                // Same rule as the Excel column: |variation / N-1|, null when N-1 is zero.
+                'variation_pct' => $soldeN1 != 0.0 ? round(abs(($soldeN - $soldeN1) / $soldeN1) * 100, 2) : null,
+                'section'   => self::sectionAudit((string) $compte),
                 'statut'    => $statut,
             ];
         }
@@ -339,61 +485,129 @@ class AuditBalanceController extends Controller
         return ['consolidation' => $consolidation, 'ecarts' => $ecarts];
     }
 
-    /** Loads an uploaded balance/grand-livre file and extracts rows by auto-detected header. */
-    private function parseBalanceFile(UploadedFile $file, string $type): array
+    /** Whole-file variant of balanceRows(), used to re-read stored imports. */
+    private function parseBalanceFile(UploadedFile|string $file, string $type): array
     {
-        $spreadsheet = IOFactory::load($file->getRealPath());
-        $sheet = $spreadsheet->getActiveSheet();
-        $grid = $sheet->toArray(null, true, true, false);
+        $rows = $this->balanceRows($file instanceof UploadedFile ? $file->getRealPath() : $file, $type);
+        return ['rows' => $rows ? iterator_to_array($rows, false) : []];
+    }
 
-        if (empty($grid)) {
-            return ['rows' => []];
+    /**
+     * Detects the columns from the header row and returns a generator of
+     * normalized rows, or null when the required columns are missing.
+     */
+    private function balanceRows(string $path, string $type): ?\Generator
+    {
+        // For legacy .xls only the detected columns are loaded (a 14 MB grand livre
+        // has 31 columns; reading 5 of them is ~5x faster and lighter).
+        $lines = SpreadsheetRowReader::rows($path, fn (array $header) => array_values($this->detectColumns($header, $type) ?? []));
+        if (!$lines->valid()) {
+            return null;
         }
 
-        $headerRow = array_shift($grid);
+        $colIndex = $this->detectColumns($lines->current(), $type);
+        if ($colIndex === null) {
+            return null;
+        }
+
+        $num = fn (array $line, string $field) => isset($colIndex[$field]) ? $this->parseNumber($line[$colIndex[$field]] ?? 0) : null;
+
+        return (function () use ($lines, $colIndex, $num, $type) {
+            for ($lines->next(); $lines->valid(); $lines->next()) {
+                $line = $lines->current();
+                $compte = trim((string) ($line[$colIndex['compte']] ?? ''));
+                if ($compte === '') continue;
+
+                $debit  = $num($line, 'debit');
+                $credit = $num($line, 'credit');
+
+                // Balance = the Solde column, else solde débiteur − créditeur,
+                // else (balances only) solde initial + débit − crédit.
+                if (isset($colIndex['solde'])) {
+                    $solde = $num($line, 'solde');
+                } elseif (isset($colIndex['solde_d'], $colIndex['solde_c'])) {
+                    $solde = round($num($line, 'solde_d') - $num($line, 'solde_c'), 3);
+                } elseif ($type !== 'grand_livre' && $debit !== null && $credit !== null) {
+                    $solde = round(($num($line, 'solde_ini') ?? 0) + $debit - $credit, 3);
+                } else {
+                    $solde = null;
+                }
+
+                yield [
+                    'compte'  => $compte,
+                    'libelle' => isset($colIndex['libelle']) ? trim((string) ($line[$colIndex['libelle']] ?? '')) : null,
+                    'solde'   => $solde,
+                    'debit'   => $debit,
+                    'credit'  => $credit,
+                    'date'    => isset($colIndex['date']) ? $this->parseDate($line[$colIndex['date']] ?? null) : null,
+                ];
+            }
+        })();
+    }
+
+    /**
+     * Maps fields (compte, libelle, solde, …) to 0-based column indexes from the
+     * header row, or null when the columns this import type needs are missing.
+     */
+    private function detectColumns(array $header, string $type): ?array
+    {
         $colIndex = [];
-        foreach ($headerRow as $i => $label) {
+        $soldeYears = []; // plain "Solde …" columns, keyed by column index => year (or null)
+        foreach ($header as $i => $label) {
             $norm = $this->normalizeHeader((string) $label);
+            if ($norm === '') continue;
+
+            foreach (self::HEADER_PATTERNS as $field => $pattern) {
+                if (preg_match($pattern, $norm)) {
+                    if ($field === 'solde') {
+                        $soldeYears[$i] = preg_match('/\b(19|20)\d{2}\b/', $norm, $m) ? (int) $m[0] : null;
+                    }
+                    $colIndex[$field] ??= $i;
+                    continue 2;
+                }
+            }
             foreach (self::HEADER_SYNONYMS as $field => $synonyms) {
                 if (isset($colIndex[$field])) continue;
                 foreach ($synonyms as $syn) {
                     if ($norm === $syn || str_starts_with($norm, $syn)) {
                         $colIndex[$field] = $i;
-                        break 2;
+                        continue 3;
                     }
                 }
             }
         }
 
-        $hasCompte = isset($colIndex['compte']);
-        $hasSolde  = isset($colIndex['solde']);
-
-        if (!$hasCompte || ($type !== 'grand_livre' && !$hasSolde)) {
-            return ['rows' => []];
+        if (isset($colIndex['designation'])) {
+            $colIndex['libelle'] = $colIndex['designation'];
+            unset($colIndex['designation']);
         }
 
-        $rows = [];
-        foreach ($grid as $line) {
-            $compte = trim((string) ($line[$colIndex['compte']] ?? ''));
-            if ($compte === '') continue;
-
-            $rows[] = [
-                'compte'  => $compte,
-                'libelle' => isset($colIndex['libelle']) ? trim((string) ($line[$colIndex['libelle']] ?? '')) : null,
-                'solde'   => $hasSolde ? $this->parseNumber($line[$colIndex['solde']] ?? 0) : null,
-                'debit'   => isset($colIndex['debit'])  ? $this->parseNumber($line[$colIndex['debit']] ?? 0)  : null,
-                'credit'  => isset($colIndex['credit']) ? $this->parseNumber($line[$colIndex['credit']] ?? 0) : null,
-                'date'    => isset($colIndex['date']) ? $this->parseDate($line[$colIndex['date']] ?? null) : null,
-            ];
+        // Like the macro's TrouverColonne(ws, "Solde 2024") / "Solde 2025": when a file
+        // carries both years, balance N-1 reads the oldest year and balance N the latest.
+        $dated = array_filter($soldeYears, fn ($y) => $y !== null);
+        if (count($dated) > 1) {
+            $colIndex['solde'] = $type === 'n_1'
+                ? array_search(min($dated), $dated, true)
+                : array_search(max($dated), $dated, true);
         }
 
-        return ['rows' => $rows];
+        $hasSolde = isset($colIndex['solde'])
+            || isset($colIndex['solde_d'], $colIndex['solde_c'])
+            || isset($colIndex['debit'], $colIndex['credit']);
+
+        if (!isset($colIndex['compte']) || ($type !== 'grand_livre' && !$hasSolde)) {
+            return null;
+        }
+
+        return $colIndex;
     }
 
     private function normalizeHeader(string $label): string
     {
         $label = mb_strtolower(trim($label));
-        return str_replace(['é', 'è', 'ê'], 'e', $label);
+        $label = str_replace(['é', 'è', 'ê', 'ë', 'à', 'â', 'î', 'ô', 'û', 'ù', 'ç'], ['e', 'e', 'e', 'e', 'a', 'a', 'i', 'o', 'u', 'u', 'c'], $label);
+        // "solde_d", "date.ecr", "N°  compte" → single-spaced words.
+        return trim(preg_replace('/[\s_.]+/', ' ', $label));
     }
 
     /** Mirrors the macro's CDbl(Val(Replace(text, ",", "."))) — comma-decimal safe. */

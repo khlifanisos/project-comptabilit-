@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Grid, Button, IconButton,
   CircularProgress, Chip, Table, TableBody, TableCell, TableHead, TableRow,
-  Tooltip, TextField,
+  Tooltip, TextField, Dialog, DialogTitle, DialogContent,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -30,6 +31,10 @@ interface ConsolidationRow {
   solde_n_1: number
   solde_n: number
   variation: number
+  /** |variation / solde N-1| in %, null when N-1 is zero. */
+  variation_pct: number | null
+  /** Audit section letter (R, E, G, …) from the account prefix; '' when unclassified. */
+  section: string
   statut: string
 }
 
@@ -47,6 +52,13 @@ const ZONES: { type: BalanceType; title: string; subtitle: string }[] = [
 
 function formatNumber(n: number): string {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })
+}
+
+/** Plan-comptable order, same as the "Section X" sheets of the Excel export. */
+const SECTIONS = ['R', 'E', 'G', 'K', 'V', 'L', 'U', 'T', 'M', 'O']
+
+function formatPct(p: number | null): string {
+  return p === null ? '—' : `${p.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`
 }
 
 function statutColor(statut: string): { bg: string; color: string } {
@@ -69,6 +81,9 @@ export default function BalanceConsolidation({ clientId }: Props) {
   const [showAll, setShowAll] = useState(false)
   // Fiscal year of balance N — labels the columns/sheets like "Solde 2024 / Solde 2025".
   const [annee, setAnnee] = useState(new Date().getFullYear() - 1)
+  // Section opened in the popup: a letter, '' for unclassified accounts, null when closed.
+  const [openSection, setOpenSection] = useState<string | null>(null)
+  const [exportingSection, setExportingSection] = useState(false)
 
   const fileRefs = {
     n: useRef<HTMLInputElement>(null),
@@ -96,11 +111,18 @@ export default function BalanceConsolidation({ clientId }: Props) {
       const fd = new FormData()
       fd.append('fichier', file)
       fd.append('client_id', String(clientId))
-      const { data } = await api.post(`/audit/balances/${type}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      // A full grand livre (≈300 000 lines) takes ~25 s server-side — well past the default 20 s timeout.
+      const { data } = await api.post(`/audit/balances/${type}`, fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 5 * 60 * 1000 })
       toast.success(data.message)
       load()
     } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Erreur lors de l'import.")
+      const status = err?.response?.status
+      toast.error(
+        err?.response?.data?.message
+          || (status === 413 ? 'Fichier trop volumineux pour le serveur (limite PHP upload_max_filesize / post_max_size).'
+          : err?.code === 'ECONNABORTED' ? "L'import a pris trop de temps. Réessayez ou découpez le fichier."
+          : "Erreur lors de l'import."),
+      )
     } finally {
       setUploading(prev => ({ ...prev, [type]: false }))
     }
@@ -116,14 +138,16 @@ export default function BalanceConsolidation({ clientId }: Props) {
     }
   }
 
-  const handleExport = async () => {
-    setExporting(true)
+  /** Downloads the whole consolidation workbook, or only one section's sheet when `section` is given. */
+  const handleExport = async (section?: string) => {
+    const setBusy = section ? setExportingSection : setExporting
+    setBusy(true)
     try {
-      const res = await api.get('/audit/balances-export', { params: { client_id: clientId, annee }, responseType: 'blob' })
+      const res = await api.get('/audit/balances-export', { params: { client_id: clientId, annee, section }, responseType: 'blob' })
       const url = window.URL.createObjectURL(res.data)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Balance_Consolidee_${annee - 1}_${annee}.xlsx`
+      a.download = section ? `Section_${section}_${annee - 1}_${annee}.xlsx` : `Balance_Consolidee_${annee - 1}_${annee}.xlsx`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -131,12 +155,22 @@ export default function BalanceConsolidation({ clientId }: Props) {
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Impossible de générer l'export.")
     } finally {
-      setExporting(false)
+      setBusy(false)
     }
   }
 
   const canConsolidate = !!imports.n && !!imports.n_1
   const rowsToShow = showAll ? consolidation : ecarts
+
+  const sectionCounts = consolidation.reduce<Record<string, number>>((acc, r) => {
+    acc[r.section] = (acc[r.section] ?? 0) + 1
+    return acc
+  }, {})
+  const sectionRows = openSection === null ? [] : consolidation.filter(r => r.section === openSection)
+  const sectionTotals = sectionRows.reduce(
+    (t, r) => ({ n_1: t.n_1 + r.solde_n_1, n: t.n + r.solde_n, variation: t.variation + r.variation }),
+    { n_1: 0, n: 0, variation: 0 },
+  )
 
   return (
     <Card sx={{ borderRadius: 3, mb: 3 }}>
@@ -222,10 +256,28 @@ export default function BalanceConsolidation({ clientId }: Props) {
                 inputProps={{ min: 1990, max: 2100 }}
                 sx={{ ml: 'auto', width: 120 }} />
               <Button size="small" variant="outlined" startIcon={exporting ? <CircularProgress size={14} /> : <DownloadIcon />}
-                disabled={exporting} onClick={handleExport}
+                disabled={exporting} onClick={() => handleExport()}
                 sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}>
                 Télécharger (.xlsx)
               </Button>
+            </Box>
+
+            <Box sx={{ mb: 2.5, p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+              <Typography fontSize={12.5} fontWeight={700} color="#1a1a2e" mb={1}>
+                Sections d'audit <Typography component="span" fontSize={11.5} color="text.secondary" fontWeight={400}>— cliquez pour voir les comptes</Typography>
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {[...SECTIONS, ''].filter(s => sectionCounts[s]).map(s => (
+                  <Chip key={s || 'none'} clickable onClick={() => setOpenSection(s)}
+                    label={<><b>{s || 'Non classés'}</b>&nbsp;· {sectionCounts[s]} compte{sectionCounts[s] > 1 ? 's' : ''}</>}
+                    sx={{
+                      fontSize: 12, borderRadius: 2, border: '1px solid',
+                      ...(s
+                        ? { bgcolor: '#EEF4FA', color: '#1F4E78', borderColor: '#C9DAEA', '&:hover': { bgcolor: '#DCE8F3' } }
+                        : { bgcolor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0' }),
+                    }} />
+                ))}
+              </Box>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -285,6 +337,63 @@ export default function BalanceConsolidation({ clientId }: Props) {
           </Typography>
         )}
       </CardContent>
+
+      <Dialog open={openSection !== null} onClose={() => setOpenSection(null)} maxWidth="lg" fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: '#1F4E78', color: '#fff', fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+            {openSection || '—'}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography fontWeight={700} fontSize={16}>{openSection ? `Section ${openSection}` : 'Comptes non classés'}</Typography>
+            <Typography fontSize={12} color="text.secondary">{sectionRows.length} compte{sectionRows.length > 1 ? 's' : ''} · balances {annee - 1} / {annee}</Typography>
+          </Box>
+          {openSection && (
+            <Button size="small" variant="outlined" disabled={exportingSection} onClick={() => handleExport(openSection)}
+              startIcon={exportingSection ? <CircularProgress size={14} /> : <DownloadIcon />}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}>
+              Télécharger (.xlsx)
+            </Button>
+          )}
+          <IconButton size="small" onClick={() => setOpenSection(null)}><CloseIcon fontSize="small" /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <Box sx={{ maxHeight: '65vh', overflow: 'auto' }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  {['Compte', 'Libellé', `Solde ${annee - 1}`, `Solde ${annee}`, 'Variation', 'Variation %'].map((h, i) => (
+                    <TableCell key={h} align={i >= 2 ? 'right' : 'left'}
+                      sx={{ fontWeight: 700, bgcolor: '#1F4E78', color: '#fff', fontSize: 12 }}>{h}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sectionRows.map(row => (
+                  <TableRow key={row.compte} hover>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{row.compte}</TableCell>
+                    <TableCell sx={{ fontSize: 12 }}>{row.libelle}</TableCell>
+                    <TableCell align="right" sx={{ fontSize: 12 }}>{formatNumber(row.solde_n_1)}</TableCell>
+                    <TableCell align="right" sx={{ fontSize: 12 }}>{formatNumber(row.solde_n)}</TableCell>
+                    <TableCell align="right" sx={{ fontSize: 12, fontWeight: 700, color: row.variation === 0 ? 'inherit' : (row.variation > 0 ? '#2E7D32' : '#C62828') }}>
+                      {formatNumber(row.variation)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontSize: 12 }}>{formatPct(row.variation_pct)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow sx={{ '& td': { fontWeight: 700, fontSize: 12, bgcolor: '#F1F5F9', borderTop: '2px solid #CBD5E1' } }}>
+                  <TableCell colSpan={2}>Total section</TableCell>
+                  <TableCell align="right">{formatNumber(sectionTotals.n_1)}</TableCell>
+                  <TableCell align="right">{formatNumber(sectionTotals.n)}</TableCell>
+                  <TableCell align="right">{formatNumber(sectionTotals.variation)}</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableBody>
+            </Table>
+          </Box>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

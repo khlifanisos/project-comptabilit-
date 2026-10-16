@@ -34,7 +34,7 @@ class TicketFactureController extends Controller
         return $prefix . str_pad((string) $seq, 6, '0', STR_PAD_LEFT);
     }
 
-    /** Returns the saved invoice, or a pre-filled draft built from the ticket. */
+    /** Returns the saved invoice, or a blank form — the admin fills everything by hand; only the numero is assigned. */
     public function show(Request $request, int $id)
     {
         $admin  = $request->user();
@@ -51,32 +51,31 @@ class TicketFactureController extends Controller
             return response()->json(['facture' => $ticket->facturation, 'existe' => true]);
         }
 
-        $client = $ticket->client;
         return response()->json([
             'existe'  => false,
             'facture' => [
                 'numero'          => $this->nextNumero(),
-                'date_facture'    => now()->toDateString(),
-                'societe'         => $admin->entreprise ?: $admin->nom,
-                'client_code'     => $client ? str_pad((string) $client->id, 6, '0', STR_PAD_LEFT) : '',
-                'client_nom'      => $client ? ($client->entreprise ?: $client->nom) : '',
-                'observation'     => $ticket->titre,
-                'exercice'        => (string) now()->year,
+                'date_facture'    => '',
+                'societe'         => '',
+                'client_code'     => '',
+                'client_nom'      => '',
+                'observation'     => '',
+                'exercice'        => '',
                 'statut'          => 'en_instance',
                 'mode_paiement'   => '',
                 'duplicata'       => false,
                 'tampon'          => false,
                 'sans_en_tete'    => false,
                 'lignes'          => [[
-                    'designation' => $ticket->titre,
+                    'designation' => '',
                     'debours'     => false,
-                    'qt'          => 1,
+                    'qt'          => 0,
                     'pu_ht'       => 0,
                     'tva'         => 19,
                     'remise'      => 0,
                 ]],
                 'remise_acc_taux' => 0,
-                'timbre'          => 1,
+                'timbre'          => 0,
             ],
         ]);
     }
@@ -168,7 +167,7 @@ class TicketFactureController extends Controller
             return response()->json(['message' => "Aucune facture n'a encore été enregistrée pour ce ticket."], 404);
         }
 
-        $facture = $ticket->facturation;
+        $facture = $ticket->facturation->load('creator:id,nom,email,entreprise');
         $pdf = Pdf::loadView('pdf.ticket_facture', [
             'f'      => $facture,
             'ticket' => $ticket,

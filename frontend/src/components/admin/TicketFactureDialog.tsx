@@ -46,10 +46,53 @@ export interface FactureSummary { id: number; ticket_id: number; numero: string;
 
 const TAUX_TVA = [0, 7, 13, 19]
 const MODES_PAIEMENT = ['Espèces', 'Chèque', 'Virement', 'Traite', 'Carte bancaire']
-const emptyLigne = (): Ligne => ({ designation: '', debours: false, qt: 1, pu_ht: 0, tva: 19, remise: 0 })
+const emptyLigne = (): Ligne => ({ designation: '', debours: false, qt: 0, pu_ht: 0, tva: 19, remise: 0 })
 
 const fmt = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 const lineNet = (l: Ligne) => l.qt * l.pu_ht * (1 - (l.remise || 0) / 100)
+
+/**
+ * "250,5", "250.5", "1 000,500" and "1.000,500" are all accepted: when a comma
+ * is present it is the decimal mark and dots are thousands separators.
+ */
+const parseNum = (raw: string) => {
+  let t = raw.replace(/\s/g, '')
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  else if ((t.match(/\./g) ?? []).length > 1) t = t.replace(/\./g, '')
+  return Number(t)
+}
+
+/**
+ * Text field for amounts: keeps the raw text while typing so "1,5" or "12."
+ * aren't wiped out mid-entry (a type="number" input reports "" for those),
+ * accepts comma or dot as decimal separator, and selects all on focus so
+ * typing replaces the default 0.
+ */
+function NumField({ value, onValue, max, sx, placeholder }: { value: number; onValue: (n: number) => void; max?: number; sx?: object; placeholder?: string }) {
+  const display = (n: number) => (n ? String(n).replace('.', ',') : '')
+  const [text, setText] = useState(display(value))
+  const [focused, setFocused] = useState(false)
+
+  useEffect(() => { if (!focused) setText(display(value)) }, [value, focused])
+
+  return (
+    <InputBase
+      value={text}
+      placeholder={placeholder}
+      inputProps={{ inputMode: 'decimal' }}
+      onFocus={e => { setFocused(true); e.target.select() }}
+      onBlur={() => { setFocused(false); setText(display(value)) }}
+      onChange={e => {
+        const raw = e.target.value
+        if (!/^[\d\s.]*(,\d*)?$/.test(raw)) return
+        setText(raw)
+        const n = parseNum(raw)
+        onValue(Number.isFinite(n) ? (max !== undefined ? Math.min(max, n) : n) : 0)
+      }}
+      sx={sx}
+    />
+  )
+}
 
 /** Same rules as TicketFactureController::computeTotals — the server recomputes on save. */
 function computeTotals(lignes: Ligne[], remiseAccTaux: number, timbre: number) {
@@ -147,6 +190,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
     if (!form || !ticketId) return false
     const lignes = form.lignes.filter(l => l.designation.trim())
     if (lignes.length === 0) { toast.error('Ajoutez au moins une ligne avec une désignation.'); return false }
+    if (!form.date_facture) { toast.error('La date est obligatoire.'); return false }
     if (!form.client_nom.trim()) { toast.error('Le client est obligatoire.'); return false }
     setSaving(true)
     try {
@@ -294,17 +338,24 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
               </Box>
               <tbody>
                 {form.lignes.map((l, i) => {
-                  const cellInput = { width: '100%', fontSize: 12, '& input': { p: '3px 4px', textAlign: 'right' } }
+                  // Editable cells look like input boxes so it's obvious where to type.
+                  const cellInput = {
+                    width: 'calc(100% - 6px)', m: '2px 3px', fontSize: 12, bgcolor: '#fff',
+                    border: '1px solid #B9CCE2', borderRadius: '3px',
+                    '&.Mui-focused': { borderColor: '#1565C0', boxShadow: '0 0 0 2px #1565C033' },
+                    '& input': { p: '3px 6px', textAlign: 'right' },
+                    '& input::placeholder': { color: '#94A3B8', opacity: 1 },
+                  }
                   return (
                     <Box component="tr" key={i} onClick={() => setSelected(i)}
                       sx={{ bgcolor: i === selected ? '#FFF3C4' : i % 2 ? C.stripe : '#fff', borderBottom: '1px dashed #B9CCE2' }}>
                       <Box component="td" sx={{ textAlign: 'right', px: 0.75, color: '#555' }}>{i + 1}</Box>
-                      <td><InputBase value={l.designation} onChange={e => setLigne(i, { designation: e.target.value })} sx={{ ...cellInput, '& input': { p: '3px 6px' } }} placeholder="Désignation…" /></td>
+                      <td><InputBase value={l.designation} onChange={e => setLigne(i, { designation: e.target.value })} sx={{ ...cellInput, '& input': { p: '3px 6px' } }} placeholder="Désignation de la prestation…" /></td>
                       <Box component="td" sx={{ textAlign: 'center' }}>
                         <Checkbox size="small" sx={{ p: 0.25 }} checked={l.debours} onChange={e => setLigne(i, { debours: e.target.checked })} />
                       </Box>
-                      <td><InputBase type="number" value={l.qt} onChange={e => setLigne(i, { qt: Number(e.target.value) || 0 })} sx={cellInput} /></td>
-                      <td><InputBase type="number" value={l.pu_ht} onChange={e => setLigne(i, { pu_ht: Number(e.target.value) || 0 })} sx={cellInput} /></td>
+                      <td><NumField value={l.qt} onValue={qt => setLigne(i, { qt })} sx={cellInput} placeholder="0" /></td>
+                      <td><NumField value={l.pu_ht} onValue={pu_ht => setLigne(i, { pu_ht })} sx={cellInput} placeholder="0,000" /></td>
                       <td>
                         <Select variant="standard" disableUnderline value={l.tva} disabled={l.debours}
                           onChange={e => setLigne(i, { tva: Number(e.target.value) })}
@@ -312,7 +363,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
                           {TAUX_TVA.map(t => <MenuItem key={t} value={t} sx={{ fontSize: 12 }}>{t} %</MenuItem>)}
                         </Select>
                       </td>
-                      <td><InputBase type="number" value={l.remise} onChange={e => setLigne(i, { remise: Math.min(100, Number(e.target.value) || 0) })} sx={cellInput} /></td>
+                      <td><NumField value={l.remise} max={100} onValue={remise => setLigne(i, { remise })} sx={cellInput} placeholder="0 %" /></td>
                       <Box component="td" sx={{ textAlign: 'right', px: 0.75, fontWeight: 600 }}>{fmt(lineNet(l))}</Box>
                     </Box>
                   )
@@ -335,8 +386,8 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
               </Box>
               <Box sx={{ display: 'flex', gap: 2, mt: 1.25, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Button sx={orangeBtn} onClick={() => addLigne({ ...emptyLigne(), designation: 'Honoraires — temps passé (heures)', qt: 1 })}>Ajouter TimeSheet</Button>
-                  <Button sx={orangeBtn} onClick={() => addLigne({ ...emptyLigne(), designation: 'Dépense / débours', debours: true, tva: 0 })}>Ajouter Dépense</Button>
+                  <Button sx={orangeBtn} onClick={() => addLigne()}>Ajouter TimeSheet</Button>
+                  <Button sx={orangeBtn} onClick={() => addLigne({ ...emptyLigne(), debours: true, tva: 0 })}>Ajouter Dépense</Button>
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 160 }}>
                   <Typography sx={{ ...lbl(), fontSize: 11 }}>Mode de Paiement</Typography>
@@ -357,13 +408,12 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
 
               <Typography sx={lbl()}>Remise Acc. %</Typography>
               <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <InputBase type="number" value={form.remise_acc_taux}
-                  onChange={e => set('remise_acc_taux', Math.min(100, Number(e.target.value) || 0))}
+                <NumField value={form.remise_acc_taux} max={100} onValue={v => set('remise_acc_taux', v)}
                   sx={{ ...fieldSx, width: 70, '& input': { p: 0, textAlign: 'right' } }} />
                 <InputBase readOnly value={fmt(totals.remiseAcc)} sx={{ ...amountBox, flex: 1 }} />
               </Box>
               <Typography sx={lbl()}>Timbre</Typography>
-              <InputBase type="number" value={form.timbre} onChange={e => set('timbre', Number(e.target.value) || 0)}
+              <NumField value={form.timbre} onValue={v => set('timbre', v)} placeholder="0,000"
                 sx={{ ...fieldSx, '& input': { p: 0, textAlign: 'right' } }} />
 
               <Typography sx={lbl()}>Mnt Débours</Typography>
