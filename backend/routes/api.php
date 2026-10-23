@@ -21,6 +21,7 @@ use App\Http\Controllers\AdminDocumentController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\TexteLoiController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\ChatbotController;
 
 // ── Public auth routes ──────────────────────────────────────
 Route::prefix('auth')->group(function () {
@@ -34,11 +35,17 @@ Route::prefix('auth')->group(function () {
 // Public app settings (currency, WhatsApp support number) — no sensitive data
 Route::get('/parametres', [ParametreController::class, 'show']);
 
+// Assistant (page d'accueil) — aucune donnée privée, fortement limité
+Route::post('/chat/public', [ChatbotController::class, 'askPublic'])->middleware('throttle:5,1');
+
 // ── Protected routes ─────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me',      [AuthController::class, 'me']);
+
+    // Assistant comptable — l'appel Gemini reste côté serveur (clé jamais exposée)
+    Route::post('/chat', [ChatbotController::class, 'ask'])->middleware('throttle:20,1');
 
     // Messages (client ↔ admin chat)
     Route::get('/messages/conversations',                    [MessageController::class, 'conversations']);
