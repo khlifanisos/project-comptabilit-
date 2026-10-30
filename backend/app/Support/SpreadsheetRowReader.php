@@ -274,7 +274,7 @@ class SpreadsheetRowReader
     }
 
     /** "512M" → bytes; -1 (unlimited) → PHP_INT_MAX. */
-    private static function bytes(string $limit): int
+    public static function bytes(string $limit): int
     {
         if ($limit === '-1') return PHP_INT_MAX;
         $n = (int) $limit;

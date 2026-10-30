@@ -143,7 +143,8 @@ export default function BalanceConsolidation({ clientId }: Props) {
     const setBusy = section ? setExportingSection : setExporting
     setBusy(true)
     try {
-      const res = await api.get('/audit/balances-export', { params: { client_id: clientId, annee, section }, responseType: 'blob' })
+      // With a grand livre, every section gets a "GL Section X" sheet — the full workbook takes ~25 s.
+      const res = await api.get('/audit/balances-export', { params: { client_id: clientId, annee, section }, responseType: 'blob', timeout: 5 * 60 * 1000 })
       const url = window.URL.createObjectURL(res.data)
       const a = document.createElement('a')
       a.href = url
@@ -161,6 +162,10 @@ export default function BalanceConsolidation({ clientId }: Props) {
 
   const canConsolidate = !!imports.n && !!imports.n_1
   const rowsToShow = showAll ? consolidation : ecarts
+  const rowsTotals = rowsToShow.reduce(
+    (t, r) => ({ n_1: t.n_1 + r.solde_n_1, n: t.n + r.solde_n }),
+    { n_1: 0, n: 0 },
+  )
 
   const sectionCounts = consolidation.reduce<Record<string, number>>((acc, r) => {
     acc[r.section] = (acc[r.section] ?? 0) + 1
@@ -326,6 +331,12 @@ export default function BalanceConsolidation({ clientId }: Props) {
                         </TableRow>
                       )
                     })}
+                    <TableRow sx={{ '& td': { fontWeight: 700, fontSize: 12, bgcolor: '#F1F5F9', borderTop: '2px solid #CBD5E1', position: 'sticky', bottom: 0 } }}>
+                      <TableCell colSpan={2}>Total</TableCell>
+                      <TableCell align="right">{formatNumber(rowsTotals.n_1)}</TableCell>
+                      <TableCell align="right">{formatNumber(rowsTotals.n)}</TableCell>
+                      <TableCell colSpan={2} />
+                    </TableRow>
                   </TableBody>
                 </Table>
               </Box>

@@ -12,10 +12,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
@@ -259,14 +261,24 @@ class AuditBalanceController extends Controller
      * Excel export matching the "Balance_Consolidee_2024_2025_Expert" reference workbook:
      * - "Balance consolidée": Compte / Libelle / Solde N-1 / Solde N sorted by compte,
      *   then Variation (=D-C), Variation % (=Variation / Solde N-1) and Section audit
-     *   (letter derived from the account prefix, see SECTIONS_AUDIT). No total row.
+     *   (letter derived from the account prefix, see SECTIONS_AUDIT), with a Total row
+     *   summing both Solde columns.
      * - "Uniquement {N-1}" / "Uniquement {N}": accounts found in only one balance.
      * - "Section X": one sheet per audit section; the letters in column G link to them.
+     *   Its Référence column links each account whose balance moved to its entries
+     *   in the "GL Section X" sheet that follows (when a grand livre is imported).
      * Column headers and sheet names carry the fiscal years (?annee=N, default last year).
      * ?section=T exports only that section's sheet.
      */
     public function exportConsolidation(Request $request)
     {
+        // The "GL Section X" sheets hold the whole grand livre of the moved accounts:
+        // ~150 MB and ~25 s for 15 000 lines, past PHP's default 128 MB / 30 s.
+        if (SpreadsheetRowReader::bytes((string) ini_get('memory_limit')) < 512 * 1048576) {
+            ini_set('memory_limit', '512M');
+        }
+        set_time_limit(300);
+
         $clientId = $this->resolveClientId($request);
         $imports = AuditBalanceImport::where('client_id', $clientId)->whereIn('type', ['n', 'n_1'])->get()->keyBy('type');
 
@@ -286,32 +298,39 @@ class AuditBalanceController extends Controller
         $uniquementN  = array_values(array_filter($ecarts, fn ($r) => $r['statut'] === 'Présent uniquement en N'));
 
         $headers = ['Compte', 'Libelle', "Solde {$anneeN1}", "Solde {$anneeN}"];
-        $sectionHeaders = [...$headers, 'Variation', 'Variation %'];
+        $sectionHeaders = [...$headers, 'Variation', 'Référence', 'Variation %'];
 
         $spreadsheet = new Spreadsheet();
         $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
 
         $section = strtoupper(trim((string) $request->input('section', '')));
+        $moved = array_filter($consolidation, fn ($r) => abs($r['variation']) >= 0.0005
+            && ($section === '' || $r['section'] === $section));
+        $glLines = $this->grandLivreParCompte($clientId, array_column($moved, 'compte'));
+
         if ($section !== '') {
             $rows = array_values(array_filter($consolidation, fn ($r) => $r['section'] === $section));
-            $this->writeConsolidatedSheet($spreadsheet->getActiveSheet()->setTitle("Section {$section}"), $sectionHeaders, $rows);
+            $sheet = $spreadsheet->getActiveSheet()->setTitle("Section {$section}");
+            $this->writeConsolidatedSheet($sheet, $sectionHeaders, $rows, true);
+            $this->writeGrandLivreSheet($spreadsheet, $sheet, $rows, $glLines);
             $filename = "Section_{$section}_{$anneeN1}_{$anneeN}.xlsx";
         } else {
             $this->writeConsolidatedSheet($spreadsheet->getActiveSheet()->setTitle('Balance consolidée'),
                 [...$headers, 'Variation', 'Variation %', 'Section audit'], $consolidation);
-            $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN1}"), $headers, $uniquementN1);
-            $this->writeUniquementSheet($spreadsheet->createSheet()->setTitle("Uniquement {$anneeN}"), $headers, $uniquementN);
+            $this->writeUniquementSheet($this->newSheet($spreadsheet, "Uniquement {$anneeN1}"), $headers, $uniquementN1);
+            $this->writeUniquementSheet($this->newSheet($spreadsheet, "Uniquement {$anneeN}"), $headers, $uniquementN);
 
             foreach (self::sectionsOrdonnees() as $lettre) {
                 $rows = array_values(array_filter($consolidation, fn ($r) => $r['section'] === $lettre));
                 if (!$rows) continue;
-                $sheet = $spreadsheet->createSheet()->setTitle("Section {$lettre}");
-                $this->writeConsolidatedSheet($sheet, $sectionHeaders, $rows);
+                $sheet = $this->newSheet($spreadsheet, "Section {$lettre}");
+                $this->writeConsolidatedSheet($sheet, $sectionHeaders, $rows, true);
                 // Way back to the main sheet, next to the table.
-                $sheet->setCellValue('H1', '← Balance consolidée');
-                $sheet->getCell('H1')->getHyperlink()->setUrl("sheet://'Balance consolidée'!A1");
-                $sheet->getStyle('H1')->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
-                $sheet->getColumnDimension('H')->setWidth(24);
+                $sheet->setCellValue('I1', '← Balance consolidée');
+                $sheet->getCell('I1')->getHyperlink()->setUrl("sheet://'Balance consolidée'!A1");
+                $sheet->getStyle('I1')->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+                $sheet->getColumnDimension('I')->setWidth(24);
+                $this->writeGrandLivreSheet($spreadsheet, $sheet, $rows, $glLines);
             }
             $this->linkSections($spreadsheet->getSheet(0), $spreadsheet);
             $filename = "Balance_Consolidee_{$anneeN1}_{$anneeN}.xlsx";
@@ -347,39 +366,161 @@ class AuditBalanceController extends Controller
         $sheet->setCellValue("D{$r}", $row['solde_n']);
     }
 
-    private function writeConsolidatedSheet($sheet, array $headers, array $rows): void
+    /** With $withReference, column F is left for the Référence links and Variation % moves to G. */
+    private function writeConsolidatedSheet($sheet, array $headers, array $rows, bool $withReference = false): void
     {
         $this->writeHeader($sheet, $headers);
-        $withSection = count($headers) > 6;
+        $withSection = in_array('Section audit', $headers, true);
+        $pctCol = $withReference ? 'G' : 'F';
 
         $r = 2;
         foreach ($rows as $row) {
             $this->writeRow($sheet, $r, $row);
             $sheet->setCellValue("E{$r}", "=+D{$r}-C{$r}");
             // Always shown as a positive rate; blank instead of #DIV/0! when N-1 is zero.
-            $sheet->setCellValue("F{$r}", "=IF(C{$r}=0,\"\",ABS(E{$r}/C{$r}))");
+            $sheet->setCellValue("{$pctCol}{$r}", "=IF(C{$r}=0,\"\",ABS(E{$r}/C{$r}))");
             if ($withSection) {
                 $sheet->setCellValue("G{$r}", $row['section']);
             }
             $r++;
         }
         $last = $r - 1;
-        $lastCol = $withSection ? 'G' : 'F';
+        $lastCol = $withSection ? 'G' : $pctCol;
 
         if ($last >= 2) {
             $sheet->getStyle("A2:{$lastCol}{$last}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
             $sheet->getStyle("C2:E{$last}")->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle("F2:F{$last}")->getNumberFormat()->setFormatCode('0.00%');
+            $sheet->getStyle("{$pctCol}2:{$pctCol}{$last}")->getNumberFormat()->setFormatCode('0.00%');
+            if ($withReference) {
+                $sheet->getStyle("F2:F{$last}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
             if ($withSection) {
                 $sheet->getStyle("G2:G{$last}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle("G2:G{$last}")->getFont()->setBold(true);
+            }
+            // Total of both Solde columns on the main sheet only, not on the Section X sheets.
+            if ($withSection) {
+                $this->writeTotalRow($sheet, $last, ['C', 'D'], $lastCol);
             }
         }
 
         $this->setWidths($sheet);
         $sheet->getColumnDimension('E')->setWidth(18);
-        $sheet->getColumnDimension('F')->setWidth(14);
+        $sheet->getColumnDimension('F')->setWidth($withReference ? 18 : 14);
         $sheet->getColumnDimension('G')->setWidth(14);
+    }
+
+    /**
+     * Grand livre entries of the given accounts, grouped by compte in date order;
+     * null when the client has not imported a grand livre.
+     */
+    private function grandLivreParCompte(int $clientId, array $comptes): ?array
+    {
+        $gl = AuditBalanceImport::where('client_id', $clientId)->where('type', 'grand_livre')->first();
+        if (!$gl) {
+            return null;
+        }
+
+        $out = [];
+        foreach (array_chunk($comptes, 1000) as $chunk) {
+            $lignes = DB::table('audit_balance_lignes')
+                ->where('import_id', $gl->id)->whereIn('compte', $chunk)
+                ->orderBy('date_operation')->orderBy('id')
+                ->get(['compte', 'libelle', 'date_operation', 'debit', 'credit', 'solde']);
+            foreach ($lignes as $l) {
+                $out[trim($l->compte)][] = $l;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * "GL Section X", right after its section sheet: one block per account whose balance
+     * moved, its entries as they are in the grand livre. The account's Référence cell
+     * (column F of the section sheet) links to its first entry, which links back.
+     */
+    private function writeGrandLivreSheet(Spreadsheet $spreadsheet, $sectionSheet, array $rows, ?array $glLines): void
+    {
+        if ($glLines === null) {
+            return;
+        }
+        $moved = array_filter($rows, fn ($row) => abs($row['variation']) >= 0.0005);
+        if (!$moved) {
+            return;
+        }
+
+        $sectionTitle = $sectionSheet->getTitle();
+        $title = "GL {$sectionTitle}";
+        $gl = $this->newSheet($spreadsheet, $title);
+        $this->writeHeader($gl, ['Compte', 'Date', 'Libellé', 'Débit', 'Crédit', 'Solde']);
+        $gl->setCellValue('H1', "← {$sectionTitle}");
+        $gl->getCell('H1')->getHyperlink()->setUrl("sheet://'{$sectionTitle}'!A1");
+        $gl->getStyle('H1')->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+
+        // Styles are applied once at the end: one range call per block is what makes
+        // PhpSpreadsheet slow on a full grand livre.
+        $firstRows = [];
+        $n = 0;
+        $r = 2;
+        foreach ($moved as $i => $row) {
+            $sr = $i + 2; // row of this account in the section sheet
+            $ref = $sectionSheet->getCell("F{$sr}");
+            $lignes = $glLines[$row['compte']] ?? [];
+            if (!$lignes) {
+                $ref->setValue('Absent du GL');
+                $sectionSheet->getStyle("F{$sr}")->getFont()->setItalic(true)->getColor()->setRGB('94A3B8');
+                continue;
+            }
+
+            // Audit reference: section letter + 500, 510, 520… in the section's order.
+            $code = $row['section'] . (500 + 10 * $n++);
+            $ref->setValue($code);
+            $ref->getHyperlink()->setUrl("sheet://'{$title}'!A{$r}")->setTooltip("Voir le grand livre du compte {$row['compte']}");
+            $sectionSheet->getStyle("F{$sr}")->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+
+            // The account's first entry links back to the section line (set once the cell is written).
+            $firstRows[$r] = [$sr, $code];
+
+            foreach ($lignes as $l) {
+                $gl->setCellValueExplicit("A{$r}", $row['compte'], DataType::TYPE_STRING);
+                if ($l->date_operation) {
+                    $gl->setCellValue("B{$r}", ExcelDate::PHPToExcel(new \DateTimeImmutable($l->date_operation)));
+                }
+                $gl->setCellValue("C{$r}", $l->libelle);
+                $gl->setCellValue("D{$r}", (float) $l->debit);
+                $gl->setCellValue("E{$r}", (float) $l->credit);
+                $gl->setCellValue("F{$r}", (float) $l->solde);
+                $r++;
+            }
+            $r++; // blank spacer between accounts
+        }
+
+        $end = $r - 2;
+        if ($end >= 2) {
+            $gl->getStyle("B2:B{$end}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+            $gl->getStyle("D2:F{$end}")->getNumberFormat()->setFormatCode('#,##0.00');
+        }
+        foreach ($firstRows as $f => [$sr, $code]) {
+            $gl->getCell("A{$f}")->getHyperlink()->setUrl("sheet://'{$sectionTitle}'!A{$sr}")->setTooltip("{$code} — retour à la section");
+            $gl->getStyle("A{$f}")->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+        }
+
+        $gl->getColumnDimension('A')->setWidth(18);
+        $gl->getColumnDimension('B')->setWidth(12);
+        $gl->getColumnDimension('C')->setWidth(45);
+        foreach (['D', 'E', 'F'] as $col) {
+            $gl->getColumnDimension($col)->setWidth(18);
+        }
+        $gl->getColumnDimension('H')->setWidth(24);
+    }
+
+    /**
+     * New sheet named at creation: createSheet()->setTitle() rescans every formula of
+     * the workbook for references to rename, which adds up with the grand livre sheets.
+     */
+    private function newSheet(Spreadsheet $spreadsheet, string $title): Worksheet
+    {
+        return $spreadsheet->addSheet(new Worksheet($spreadsheet, $title));
     }
 
     /** Section letters in the order they appear in the plan comptable (R, E, G, K, V, …), without duplicates. */
@@ -421,6 +562,22 @@ class AuditBalanceController extends Controller
         }
 
         $this->setWidths($sheet);
+    }
+
+    /** Bold "Total" row right under the data, with a SUM formula for each of $cols. */
+    private function writeTotalRow($sheet, int $last, array $cols, string $lastCol): void
+    {
+        $t = $last + 1;
+        $sheet->setCellValue("A{$t}", 'Total');
+        foreach ($cols as $col) {
+            $sheet->setCellValue("{$col}{$t}", "=SUM({$col}2:{$col}{$last})");
+            $sheet->getStyle("{$col}{$t}")->getNumberFormat()->setFormatCode('#,##0.00');
+        }
+        $style = $sheet->getStyle("A{$t}:{$lastCol}{$t}");
+        $style->getFont()->setBold(true);
+        $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1F5F9');
+        $style->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $style->getBorders()->getTop()->setBorderStyle(Border::BORDER_MEDIUM);
     }
 
     /**
