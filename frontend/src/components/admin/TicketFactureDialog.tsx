@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Dialog, Box, Typography, IconButton, Button, Checkbox, FormControlLabel, Radio, RadioGroup,
-  CircularProgress, MenuItem, Select, InputBase,
+  CircularProgress, MenuItem, Select, InputBase, Tooltip,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
@@ -144,6 +144,7 @@ interface Props {
 export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Props) {
   const [form, setForm] = useState<FactureForm | null>(null)
   const [exists, setExists] = useState(false)
+  const [clientIu, setClientIu] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -159,6 +160,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
         const f = data.facture
         setForm({ ...f, date_facture: String(f.date_facture).slice(0, 10), mode_paiement: f.mode_paiement ?? '', observation: f.observation ?? '', exercice: f.exercice ?? '', client_code: f.client_code ?? '', societe: f.societe ?? '' })
         setExists(data.existe)
+        setClientIu(data.client_iu ?? null)
       })
       .catch(err => { toast.error(err?.response?.data?.message ?? 'Impossible de charger la facturation.'); onClose() })
       .finally(() => setLoading(false))
@@ -426,7 +428,14 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
               <Typography sx={lbl()}>Net Facture</Typography>
               <InputBase readOnly value={fmt(totals.ttc)} sx={{ ...amountBox, fontWeight: 700 }} />
 
-              <Box sx={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+              <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 1.25, mt: 0.5 }}>
+                {/* Identifiant unique of the client, from the fiche client (Facturation › Fiches clients). */}
+                <Typography sx={lbl()}>IU Client</Typography>
+                <Tooltip title={clientIu ? '' : "Renseignez l'identifiant unique dans Facturation › Fiches clients"}>
+                  <InputBase readOnly value={clientIu ?? 'Non renseigné'}
+                    sx={{ ...readonlySx, width: 150, ...(clientIu ? {} : { color: '#94A3B8', fontWeight: 400 }) }} />
+                </Tooltip>
+                <Box sx={{ flex: 1 }} />
                 <Button variant="contained" disabled={saving || downloading} onClick={downloadPdf}
                   startIcon={downloading ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <PictureAsPdfIcon />}
                   sx={{ textTransform: 'none', fontWeight: 700, bgcolor: '#1F4E78', '&:hover': { bgcolor: '#173B5B' } }}>

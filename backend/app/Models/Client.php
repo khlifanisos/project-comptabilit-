@@ -13,7 +13,7 @@ class Client extends Authenticatable
     protected $table = 'clients';
 
     protected $fillable = [
-        'nom', 'email', 'mot_de_passe', 'entreprise',
+        'nom', 'email', 'mot_de_passe', 'entreprise', 'raison_sociale', 'matricule_fiscale', 'gerant', 'contact',
         'telephone', 'adresse', 'avatar', 'is_actif', 'is_approved',
         'last_login_at', 'notif_email', 'notif_platform',
     ];
@@ -61,6 +61,11 @@ class Client extends Authenticatable
     public function echeanciers()
     {
         return $this->hasMany(EcheancierLeasing::class, 'client_id');
+    }
+
+    public function contrats()
+    {
+        return $this->hasMany(Contrat::class, 'client_id');
     }
 
     public function notifications()

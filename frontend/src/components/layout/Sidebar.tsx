@@ -14,6 +14,7 @@ import SettingsIcon       from '@mui/icons-material/Settings'
 import PeopleIcon         from '@mui/icons-material/People'
 import FolderIcon         from '@mui/icons-material/Folder'
 import BarChartIcon       from '@mui/icons-material/BarChart'
+import ReceiptLongIcon    from '@mui/icons-material/ReceiptLong'
 import SecurityIcon       from '@mui/icons-material/Security'
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter'
 import MenuBookIcon       from '@mui/icons-material/MenuBook'
@@ -55,10 +56,10 @@ const adminLinks = [
   // Tableau de bord hidden for now — route still exists at /admin, just not linked in nav.
   { label: 'Messagerie',      icon: <ForumIcon />,     path: '/admin/messages' },
   { label: 'Tickets',         icon: <ConfirmationNumberIcon />, path: '/admin/tickets' },
+  { label: 'Facturation',     icon: <ReceiptLongIcon />, path: '/admin/facturation' },
   { label: 'Clients',         icon: <PeopleIcon />,    path: '/admin/clients' },
   { label: 'Documents',       icon: <FolderIcon />,    path: '/admin/documents' },
   { label: 'Audit intelligent', icon: <SecurityIcon />,  path: '/audit' },
-  { label: 'Rapports',        icon: <BarChartIcon />,  path: '/admin/rapports' },
 ]
 
 // Tentative 4-axes admin nav — toggle USE_ADMIN_AXES below to revert to the flat adminLinks above.
@@ -70,7 +71,7 @@ const adminAxes = [
     items: [
       { label: 'Messagerie', icon: <ForumIcon />,    path: '/admin/messages' },
       { label: 'Tickets',    icon: <ConfirmationNumberIcon />, path: '/admin/tickets' },
-      { label: 'Rapports',   icon: <BarChartIcon />, path: '/admin/rapports' },
+      { label: 'Facturation', icon: <ReceiptLongIcon />, path: '/admin/facturation' },
     ],
   },
   {

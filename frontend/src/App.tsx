@@ -34,7 +34,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminClients from './pages/admin/AdminClients'
 import AdminClientDossier from './pages/admin/AdminClientDossier'
 import AdminDocuments from './pages/admin/AdminDocuments'
-import AdminRapports from './pages/admin/AdminRapports'
+import AdminFacturation from './pages/admin/AdminFacturation'
 import AdminAudit from './pages/admin/AdminAudit'
 import AdminTextesLois from './pages/admin/AdminTextesLois'
 import AdminMessagerie from './pages/admin/AdminMessagerie'
@@ -138,9 +138,9 @@ function ThemedApp() {
                 <DashboardLayout><AdminDocuments /></DashboardLayout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/rapports" element={
+            <Route path="/admin/facturation" element={
               <ProtectedRoute allowedRole="admin">
-                <DashboardLayout><AdminRapports /></DashboardLayout>
+                <DashboardLayout><AdminFacturation /></DashboardLayout>
               </ProtectedRoute>
             } />
             <Route path="/admin/textes-lois" element={

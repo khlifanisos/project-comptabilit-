@@ -17,6 +17,7 @@ use App\Http\Controllers\InvoiceAnalysisController;
 use App\Http\Controllers\ExcelExportController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketFactureController;
+use App\Http\Controllers\FacturationController;
 use App\Http\Controllers\AdminDocumentController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\TexteLoiController;
@@ -169,6 +170,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tickets/{id}/facturation',     [TicketFactureController::class, 'show']);
     Route::post('/tickets/{id}/facturation',    [TicketFactureController::class, 'save']);
     Route::get('/tickets/{id}/facturation/pdf', [TicketFactureController::class, 'pdf']);
+
+    // Facturation : liste des factures (tickets + contrats), règlements, fiches client, contrats
+    Route::get('/facturation/factures',                 [FacturationController::class, 'index']);
+    Route::post('/facturation/factures/generer',        [FacturationController::class, 'generer']);
+    Route::post('/facturation/factures/{id}/valider',   [FacturationController::class, 'valider']);
+    Route::delete('/facturation/factures/{id}',         [FacturationController::class, 'destroy']);
+    Route::get('/facturation/factures/{id}/pdf',        [FacturationController::class, 'pdf']);
+    Route::post('/facturation/factures/{id}/reglements', [FacturationController::class, 'storeReglement']);
+    Route::delete('/facturation/reglements/{id}',       [FacturationController::class, 'destroyReglement']);
+    Route::get('/facturation/clients',                  [FacturationController::class, 'clients']);
+    Route::put('/facturation/clients/{id}',             [FacturationController::class, 'updateFiche']);
+    Route::post('/facturation/contrats',                [FacturationController::class, 'storeContrat']);
+    Route::put('/facturation/contrats/{id}',            [FacturationController::class, 'updateContrat']);
+    Route::delete('/facturation/contrats/{id}',         [FacturationController::class, 'destroyContrat']);
 
     // Fichiers Excel archivés (analyses de factures converties)
     Route::get('/excel-exports',              [ExcelExportController::class, 'index']);

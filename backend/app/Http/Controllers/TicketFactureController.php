@@ -25,14 +25,6 @@ class TicketFactureController extends Controller
         return $admin->is_super_admin || $ticket->created_by === $admin->id || $ticket->assigned_to === $admin->id;
     }
 
-    /** Next "YY-000001" number, sequenced per calendar year. */
-    private function nextNumero(): string
-    {
-        $prefix = now()->format('y') . '-';
-        $last = TicketFacture::where('numero', 'like', $prefix . '%')->orderByDesc('numero')->value('numero');
-        $seq = $last ? ((int) substr($last, strlen($prefix))) + 1 : 1;
-        return $prefix . str_pad((string) $seq, 6, '0', STR_PAD_LEFT);
-    }
 
     /** Returns the saved invoice, or a blank form — the admin fills everything by hand; only the numero is assigned. */
     public function show(Request $request, int $id)
@@ -47,14 +39,18 @@ class TicketFactureController extends Controller
             return response()->json(['message' => 'Le ticket doit être validé avant la facturation.'], 422);
         }
 
+        // Identifiant unique of the ticket's client, from its fiche client (shown, not stored on the invoice).
+        $clientIu = $ticket->client?->matricule_fiscale;
+
         if ($ticket->facturation) {
-            return response()->json(['facture' => $ticket->facturation, 'existe' => true]);
+            return response()->json(['facture' => $ticket->facturation, 'existe' => true, 'client_iu' => $clientIu]);
         }
 
         return response()->json([
             'existe'  => false,
+            'client_iu' => $clientIu,
             'facture' => [
-                'numero'          => $this->nextNumero(),
+                'numero'          => TicketFacture::nextNumero(),
                 'date_facture'    => '',
                 'societe'         => '',
                 'client_code'     => '',
@@ -140,8 +136,9 @@ class TicketFactureController extends Controller
             } else {
                 $facture = TicketFacture::create($data + [
                     'ticket_id'  => $ticket->id,
+                    'client_id'  => $ticket->client_id,
                     'created_by' => $admin->id,
-                    'numero'     => $this->nextNumero(),
+                    'numero'     => TicketFacture::nextNumero(),
                 ]);
             }
             // "En instance" is still a draft; anything further counts as billed.

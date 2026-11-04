@@ -5,6 +5,8 @@
 
     $statuts = ['en_instance' => 'En instance', 'facture' => 'Facturée', 'reg_client' => 'Réglée'];
     $societe = $f->societe ?: ($f->creator?->entreprise ?: $f->creator?->nom);
+    // Contract préfactures ("PF-…") are printed as such until validated.
+    $titre = $f->isPrefacture() ? 'PRÉFACTURE' : 'FACTURE';
 
     $hasRemise      = collect($f->lignes)->contains(fn ($l) => ($l['remise'] ?? 0) > 0);
     $basesUtilisees = collect($f->bases_tva)->filter(fn ($b) => $b > 0);
@@ -16,7 +18,8 @@
     $hauteurLignes = ($f->sans_en_tete ? 470 : 555)
         - ($f->remise_acc > 0 ? 27 : 0)
         - ($f->montant_debours > 0 ? 27 : 0)
-        - ($f->tampon ? 84 : 0);
+        - ($f->tampon ? 84 : 0)
+        - ($client?->matricule_fiscale ? 30 : 0);
     $filler        = max(30, $hauteurLignes - count($f->lignes) * 27);
 
     $enLettres = \App\Support\MontantEnLettres::convertir($f->net_facture, $devise);
@@ -83,7 +86,7 @@
             @endunless
         </td>
         <td class="r">
-            <div class="titre">FACTURE{{ $f->duplicata ? ' · DUPLICATA' : '' }}</div>
+            <div class="titre">{{ $titre }}{{ $f->duplicata ? ' · DUPLICATA' : '' }}</div>
             <table style="margin-top: 8px;">
                 <tr><td class="r soft" style="width: 70%;">N°</td><td class="r" style="padding-left: 10px;"><b>{{ $f->numero }}</b></td></tr>
                 <tr><td class="r soft">Date</td><td class="r">{{ $f->date_facture->format('d/m/Y') }}</td></tr>
@@ -105,13 +108,18 @@
             <div class="lbl">Facturé à</div>
             <div style="font-size: 12px; font-weight: bold; color: #1E293B;">{{ $f->client_nom }}</div>
             @if ($f->client_code)<div class="soft" style="margin-top: 2px;">Code client : {{ $f->client_code }}</div>@endif
+            @if ($client?->matricule_fiscale)<div>IU : {{ $client->matricule_fiscale }}</div>@endif
             @if ($client?->adresse)<div>{{ $client->adresse }}</div>@endif
             @if ($client?->email)<div class="soft">{{ $client->email }}</div>@endif
         </td>
         <td style="width: 50%;">
             <div class="lbl">Objet</div>
-            <div>{{ $f->observation ?: $ticket->titre }}</div>
-            <div class="soft" style="margin-top: 2px;">Réf. ticket #{{ $ticket->id }}</div>
+            <div>{{ $f->observation ?: $ticket?->titre }}</div>
+            @if ($ticket)
+                <div class="soft" style="margin-top: 2px;">Réf. ticket #{{ $ticket->id }}</div>
+            @elseif ($f->periode_debut)
+                <div class="soft" style="margin-top: 2px;">Période du {{ $f->periode_debut->format('d/m/Y') }} au {{ $f->periode_fin->format('d/m/Y') }}</div>
+            @endif
         </td>
     </tr>
 </table>
@@ -198,6 +206,6 @@
     </tr>
 </table>
 
-<div class="footer">{{ $societe }} — Facture {{ $f->numero }} — Merci pour votre confiance</div>
+<div class="footer">{{ $societe }} — {{ ucfirst(mb_strtolower($titre)) }} {{ $f->numero }} — Merci pour votre confiance</div>
 </body>
 </html>
