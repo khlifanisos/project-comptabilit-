@@ -32,16 +32,25 @@ class AuditBalanceController extends Controller
 {
     private const TYPES = ['n', 'n_1', 'grand_livre'];
 
+    /** Data rows read ahead to recognise the account column by its content. */
+    private const SAMPLE_ROWS = 200;
+
+    /** Minimum share of account-number-looking values for a column to be the Compte. */
+    private const ACCOUNT_SCORE = 0.8;
+
     private const LABELS = [
         'n'           => 'Balance N',
         'n_1'         => 'Balance N-1',
         'grand_livre' => 'Grand livre',
     ];
 
-    /** Header synonyms (lowercased, trimmed) the macro's TrouverColonne would also accept. */
-    /** Header prefixes (normalized: lowercase, no accents, "_" → space); first matching column wins. */
+    /**
+     * Header prefixes (normalized: lowercase, no accents, "_" → space), most specific first:
+     * a column matching an earlier synonym replaces one matched by a later one, so in a
+     * grand livre with "N COMPTE" (number) and "COMPTE" (account name) the number wins.
+     */
     private const HEADER_SYNONYMS = [
-        'compte'  => ['compte', 'n° compte', 'numero de compte', 'code compte'],
+        'compte'  => ['n compte', 'n° compte', 'no compte', 'num compte', 'numero compte', 'numero de compte', 'code compte', 'compte'],
         'libelle' => ['libelle', 'intitule'],
         // Account name ("designat" in grand livre exports) — preferred over the entry's "libelle".
         'designation' => ['designat'],
@@ -62,6 +71,10 @@ class AuditBalanceController extends Controller
         'solde_ini' => "/^(solde (ini|init|initial|ouverture|d'ouverture|anterieur|a nouveau)|report|a nouveau)$/",
         'debit'   => '/^(total |mouvements? |mvt )?debits?( \d{4})?$/',
         'credit'  => '/^(total |mouvements? |mvt )?credits?( \d{4})?$/',
+        // EMC balance exports ("compte, designat, solde_ini, debit, credit, tx_clef, clef1")
+        // carry headers shifted by one column: the values are really débit, crédit,
+        // solde D, solde C and, under "clef1", the net balance (débit − crédit).
+        'clef1'   => '/^clef ?1$/',
     ];
 
     /**
@@ -656,25 +669,45 @@ class AuditBalanceController extends Controller
      */
     private function balanceRows(string $path, string $type): ?\Generator
     {
-        // For legacy .xls only the detected columns are loaded (a 14 MB grand livre
-        // has 31 columns; reading 5 of them is ~5x faster and lighter).
-        $lines = SpreadsheetRowReader::rows($path, fn (array $header) => array_values($this->detectColumns($header, $type) ?? []));
+        // For legacy .xls only the needed columns are loaded (a 14 MB grand livre
+        // has 31 columns; reading 5 of them is ~5x faster and lighter). The columns
+        // that could hold the account number are kept too, for the content check below.
+        $lines = SpreadsheetRowReader::rows($path, fn (array $header) => array_values(array_unique([
+            ...array_values($this->detectColumns($header, $type) ?? []),
+            ...$this->compteCandidates($header),
+            ...array_slice(array_keys($header), 0, 3),
+        ])));
         if (!$lines->valid()) {
             return null;
         }
+        $header = $lines->current();
 
-        $colIndex = $this->detectColumns($lines->current(), $type);
+        // Headers differ from one export to the next ("N COMPTE", "N°compte", "compte"
+        // holding the account name…), so the first data rows are read ahead and the
+        // account column is chosen by what it actually contains.
+        $sample = [];
+        for ($lines->next(); $lines->valid() && count($sample) < self::SAMPLE_ROWS; $lines->next()) {
+            $sample[] = $lines->current();
+        }
+
+        $colIndex = $this->detectColumns($header, $type, $sample);
         if ($colIndex === null) {
             return null;
         }
 
         $num = fn (array $line, string $field) => isset($colIndex[$field]) ? $this->parseNumber($line[$colIndex[$field]] ?? 0) : null;
 
-        return (function () use ($lines, $colIndex, $num, $type) {
-            for ($lines->next(); $lines->valid(); $lines->next()) {
-                $line = $lines->current();
+        return (function () use ($lines, $sample, $colIndex, $num, $type) {
+            $all = (function () use ($lines, $sample) {
+                yield from $sample;
+                for (; $lines->valid(); $lines->next()) {
+                    yield $lines->current();
+                }
+            })();
+            foreach ($all as $line) {
                 $compte = trim((string) ($line[$colIndex['compte']] ?? ''));
-                if ($compte === '') continue;
+                // Skip blanks and subtotal lines ("Total 10100000" after each account in a grand livre).
+                if ($compte === '' || stripos($compte, 'total') === 0) continue;
 
                 $debit  = $num($line, 'debit');
                 $credit = $num($line, 'credit');
@@ -685,6 +718,8 @@ class AuditBalanceController extends Controller
                     $solde = $num($line, 'solde');
                 } elseif (isset($colIndex['solde_d'], $colIndex['solde_c'])) {
                     $solde = round($num($line, 'solde_d') - $num($line, 'solde_c'), 3);
+                } elseif (isset($colIndex['clef1']) && $type !== 'grand_livre') {
+                    $solde = $num($line, 'clef1');
                 } elseif ($type !== 'grand_livre' && $debit !== null && $credit !== null) {
                     $solde = round(($num($line, 'solde_ini') ?? 0) + $debit - $credit, 3);
                 } else {
@@ -707,10 +742,11 @@ class AuditBalanceController extends Controller
      * Maps fields (compte, libelle, solde, …) to 0-based column indexes from the
      * header row, or null when the columns this import type needs are missing.
      */
-    private function detectColumns(array $header, string $type): ?array
+    private function detectColumns(array $header, string $type, array $sample = []): ?array
     {
         $colIndex = [];
         $soldeYears = []; // plain "Solde …" columns, keyed by column index => year (or null)
+        $synRank = [];    // field => rank of the synonym its column matched
         foreach ($header as $i => $label) {
             $norm = $this->normalizeHeader((string) $label);
             if ($norm === '') continue;
@@ -725,10 +761,11 @@ class AuditBalanceController extends Controller
                 }
             }
             foreach (self::HEADER_SYNONYMS as $field => $synonyms) {
-                if (isset($colIndex[$field])) continue;
-                foreach ($synonyms as $syn) {
+                foreach ($synonyms as $rank => $syn) {
+                    if ($rank >= ($synRank[$field] ?? PHP_INT_MAX)) break;
                     if ($norm === $syn || str_starts_with($norm, $syn)) {
                         $colIndex[$field] = $i;
+                        $synRank[$field] = $rank;
                         continue 3;
                     }
                 }
@@ -749,6 +786,10 @@ class AuditBalanceController extends Controller
                 : array_search(max($dated), $dated, true);
         }
 
+        if ($sample) {
+            $colIndex = $this->resolveCompteColumn($header, $colIndex, $sample);
+        }
+
         $hasSolde = isset($colIndex['solde'])
             || isset($colIndex['solde_d'], $colIndex['solde_c'])
             || isset($colIndex['debit'], $colIndex['credit']);
@@ -760,11 +801,73 @@ class AuditBalanceController extends Controller
         return $colIndex;
     }
 
+    /** Columns whose header suggests an account number: "compte", "cpt", "N°…", "numéro…". */
+    private function compteCandidates(array $header): array
+    {
+        $out = [];
+        foreach ($header as $i => $label) {
+            if (preg_match('/compte|\bcpte?\b|account|^n ?°|^no\b|^num/', $this->normalizeHeader((string) $label))) {
+                $out[] = $i;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Picks the account column from the data, not the header: the header's choice is
+     * kept when its values are account numbers; otherwise the first column that holds
+     * account numbers wins — among the account-like headers first, then among the
+     * columns no other field uses. The column it replaces (typically the account name)
+     * becomes the libellé when none was found.
+     */
+    private function resolveCompteColumn(array $header, array $colIndex, array $sample): array
+    {
+        $current = $colIndex['compte'] ?? null;
+        if ($current !== null && $this->accountScore($sample, $current) >= self::ACCOUNT_SCORE) {
+            return $colIndex;
+        }
+
+        $used = array_values(array_diff_key($colIndex, ['compte' => 0, 'libelle' => 0]));
+        $others = array_values(array_diff(array_keys($header), $used, $this->compteCandidates($header)));
+
+        foreach ([$this->compteCandidates($header), $others] as $columns) {
+            foreach ($columns as $i) {
+                if ($i === $current || in_array($i, $used, true)) continue;
+                if ($this->accountScore($sample, $i) >= self::ACCOUNT_SCORE) {
+                    if ($current !== null && !isset($colIndex['libelle'])) {
+                        $colIndex['libelle'] = $current;
+                    }
+                    $colIndex['compte'] = $i;
+                    return $colIndex;
+                }
+            }
+        }
+        return $colIndex;
+    }
+
+    /** Share of the column's sample values (subtotal lines aside) that look like account numbers. */
+    private function accountScore(array $sample, int $col): float
+    {
+        $seen = $ok = 0;
+        foreach ($sample as $line) {
+            $v = trim((string) ($line[$col] ?? ''));
+            if ($v === '' || stripos($v, 'total') === 0) continue;
+            $seen++;
+            // 3+ leading digits, optional letters/digits after ("401CLIENT"), never an
+            // amount ("-50000", "86.85") nor zero.
+            if (preg_match('/^\d{3,}[0-9A-Za-z]*$/', $v) && !preg_match('/^0+$/', $v)) {
+                $ok++;
+            }
+        }
+        return $seen ? $ok / $seen : 0.0;
+    }
+
     private function normalizeHeader(string $label): string
     {
         $label = mb_strtolower(trim($label));
         $label = str_replace(['é', 'è', 'ê', 'ë', 'à', 'â', 'î', 'ô', 'û', 'ù', 'ç'], ['e', 'e', 'e', 'e', 'a', 'a', 'i', 'o', 'u', 'u', 'c'], $label);
-        // "solde_d", "date.ecr", "N°  compte" → single-spaced words.
+        // "solde_d", "date.ecr", "N°  compte" → single-spaced words; "N°compte" → "n° compte".
+        $label = preg_replace('/^(n|no|num)°?(?=compte)/u', '$1° ', $label);
         return trim(preg_replace('/[\s_.]+/', ' ', $label));
     }
 
@@ -786,6 +889,11 @@ class AuditBalanceController extends Controller
             } catch (\Throwable) {
                 return null;
             }
+        }
+        // French exports write dates as dd/mm/yyyy, which DateTime would read as mm/dd.
+        if (preg_match('#^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$#', trim((string) $value), $m)) {
+            $y = strlen($m[3]) === 2 ? 2000 + (int) $m[3] : (int) $m[3];
+            return checkdate((int) $m[2], (int) $m[1], $y) ? sprintf('%04d-%02d-%02d', $y, $m[2], $m[1]) : null;
         }
         try {
             return (new \DateTime((string) $value))->format('Y-m-d');
