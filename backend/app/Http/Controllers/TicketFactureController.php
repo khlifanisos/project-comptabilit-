@@ -43,12 +43,19 @@ class TicketFactureController extends Controller
         $clientIu = $ticket->client?->matricule_fiscale;
 
         if ($ticket->facturation) {
-            return response()->json(['facture' => $ticket->facturation, 'existe' => true, 'client_iu' => $clientIu]);
+            return response()->json([
+                'facture'   => $ticket->facturation,
+                'existe'    => true,
+                'client_iu' => $clientIu,
+                // Payments already imputed (Facturation › Imputer un règlement), for the "Réglé / Reste" display.
+                'regle'     => round((float) $ticket->facturation->reglements()->sum('montant'), 3),
+            ]);
         }
 
         return response()->json([
             'existe'  => false,
             'client_iu' => $clientIu,
+            'regle'   => 0,
             'facture' => [
                 'numero'          => TicketFacture::nextNumero(),
                 'date_facture'    => '',

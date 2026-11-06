@@ -454,7 +454,11 @@ function FacturesTab({ clients = [], isSuperAdmin, onChanged, clientId, onTotaux
   )
 }
 
-function ReglementDialog({ facture, onClose, onSaved }: { facture: Facture | null; onClose: () => void; onSaved: (f: Facture) => void }) {
+/** What the règlement dialog needs to know about the invoice it imputes on. */
+export type ReglementTarget = Pick<Facture, 'id' | 'numero' | 'client_nom' | 'reste'>
+export type FactureReglee = Facture & { statut: string }
+
+export function ReglementDialog({ facture, onClose, onSaved }: { facture: ReglementTarget | null; onClose: () => void; onSaved: (f: FactureReglee) => void }) {
   const [form, setForm] = useState({ mode: 'virement' as ModeReglement, banque: '', reference: '', montant: '', date_reglement: today(), observation: '' })
   const [saving, setSaving] = useState(false)
 

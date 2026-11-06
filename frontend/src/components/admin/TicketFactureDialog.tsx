@@ -10,8 +10,10 @@ import CheckIcon from '@mui/icons-material/Check'
 import ClearIcon from '@mui/icons-material/Clear'
 import AddIcon from '@mui/icons-material/Add'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import PaymentsIcon from '@mui/icons-material/Payments'
 import toast from 'react-hot-toast'
 import api from '../../api/axios'
+import { ReglementDialog, ReglementTarget } from '../../pages/admin/AdminFacturation'
 
 type StatutFacture = 'en_instance' | 'facture' | 'reg_client'
 
@@ -149,6 +151,9 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [selected, setSelected] = useState(0)
+  // Payments imputed on this invoice, and the dialog to impute a new one.
+  const [regle, setRegle] = useState(0)
+  const [reglementFor, setReglementFor] = useState<ReglementTarget | null>(null)
 
   useEffect(() => {
     if (!ticketId) return
@@ -161,6 +166,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
         setForm({ ...f, date_facture: String(f.date_facture).slice(0, 10), mode_paiement: f.mode_paiement ?? '', observation: f.observation ?? '', exercice: f.exercice ?? '', client_code: f.client_code ?? '', societe: f.societe ?? '' })
         setExists(data.existe)
         setClientIu(data.client_iu ?? null)
+        setRegle(Number(data.regle ?? 0))
       })
       .catch(err => { toast.error(err?.response?.data?.message ?? 'Impossible de charger la facturation.'); onClose() })
       .finally(() => setLoading(false))
@@ -188,12 +194,13 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
     return { ...f, lignes }
   })
 
-  const save = useCallback(async (): Promise<boolean> => {
-    if (!form || !ticketId) return false
+  /** Saves the invoice; resolves to the saved invoice, or null when it could not be saved. */
+  const save = useCallback(async (): Promise<FactureSummary | null> => {
+    if (!form || !ticketId) return null
     const lignes = form.lignes.filter(l => l.designation.trim())
-    if (lignes.length === 0) { toast.error('Ajoutez au moins une ligne avec une désignation.'); return false }
-    if (!form.date_facture) { toast.error('La date est obligatoire.'); return false }
-    if (!form.client_nom.trim()) { toast.error('Le client est obligatoire.'); return false }
+    if (lignes.length === 0) { toast.error('Ajoutez au moins une ligne avec une désignation.'); return null }
+    if (!form.date_facture) { toast.error('La date est obligatoire.'); return null }
+    if (!form.client_nom.trim()) { toast.error('Le client est obligatoire.'); return null }
     setSaving(true)
     try {
       const { data } = await api.post(`/tickets/${ticketId}/facturation`, { ...form, lignes })
@@ -201,10 +208,10 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
       setExists(true)
       setForm(f => f && { ...f, numero: data.facture.numero, lignes })
       onSaved(data.facture)
-      return true
+      return data.facture as FactureSummary
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Erreur lors de l'enregistrement.")
-      return false
+      return null
     } finally {
       setSaving(false)
     }
@@ -229,6 +236,20 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
     } finally {
       setDownloading(false)
     }
+  }
+
+  // A payment is imputed on the saved invoice: save first, so its lines and amount are the ones paid.
+  const imputerReglement = async () => {
+    if (!form) return
+    if (form.statut === 'en_instance') {
+      toast.error("Passez la facture en « Facturé » avant d'imputer un règlement.")
+      return
+    }
+    const saved = await save()
+    if (!saved) return
+    const reste = Math.round((saved.net_facture - regle) * 1000) / 1000
+    if (reste <= 0.0005) { toast.error('Cette facture est déjà entièrement réglée.'); return }
+    setReglementFor({ id: saved.id, numero: saved.numero, client_nom: form.client_nom, reste })
   }
 
   // F10 = OK, as on the desktop form.
@@ -436,6 +457,21 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
                     sx={{ ...readonlySx, width: 150, ...(clientIu ? {} : { color: '#94A3B8', fontWeight: 400 }) }} />
                 </Tooltip>
                 <Box sx={{ flex: 1 }} />
+                {exists && (
+                  <Typography sx={{ fontSize: 11.5, color: C.label, textAlign: 'right', lineHeight: 1.3 }}>
+                    Réglé <b style={{ color: '#2E7D32' }}>{fmt(regle)}</b><br />
+                    Reste <b style={{ color: totals.ttc - regle > 0.0005 ? C.red : '#2E7D32' }}>{fmt(Math.max(0, totals.ttc - regle))}</b>
+                  </Typography>
+                )}
+                <Tooltip title={form.statut === 'en_instance' ? 'La facture doit être « Facturé » pour recevoir un règlement' : ''}>
+                  <span>
+                    <Button variant="contained" disabled={saving || downloading} onClick={imputerReglement}
+                      startIcon={<PaymentsIcon />}
+                      sx={{ textTransform: 'none', fontWeight: 700, bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }}>
+                      Imputer règlement
+                    </Button>
+                  </span>
+                </Tooltip>
                 <Button variant="contained" disabled={saving || downloading} onClick={downloadPdf}
                   startIcon={downloading ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <PictureAsPdfIcon />}
                   sx={{ textTransform: 'none', fontWeight: 700, bgcolor: '#1F4E78', '&:hover': { bgcolor: '#173B5B' } }}>
@@ -446,6 +482,16 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
           </Box>
         </Box>
       )}
+
+      <ReglementDialog facture={reglementFor} onClose={() => setReglementFor(null)}
+        onSaved={f => {
+          setReglementFor(null)
+          setRegle(f.montant_regle)
+          // The server moves the invoice to "Rég. Client" once fully paid (or back to "Facturé").
+          const statut = f.statut as StatutFacture
+          setForm(prev => prev && { ...prev, statut })
+          if (ticketId) onSaved({ id: f.id, ticket_id: ticketId, numero: f.numero, statut, net_facture: f.net_facture })
+        }} />
     </Dialog>
   )
 }
