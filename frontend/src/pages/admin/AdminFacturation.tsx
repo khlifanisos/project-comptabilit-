@@ -170,12 +170,78 @@ export default function AdminFacturation() {
   )
 }
 
+// ── Dossier client : tout ce qui concerne la facturation d'un client ─────────
+interface Totaux { facture: number; regle: number; reste: number; prefactures: number; nb_prefactures: number }
+
+/** Facturation folder of the client dossier: summary, contracts, then the client's invoices and préfactures. */
+export function ClientFacturationFolder({ clientId, onChanged }: { clientId: number; onChanged?: () => void }) {
+  const { user } = useAuth()
+  const isSuperAdmin = !!user?.is_super_admin
+  const [fiche, setFiche] = useState<ClientFiche | null>(null)
+  const [totaux, setTotaux] = useState<Totaux | null>(null)
+
+  const loadFiche = useCallback(() => {
+    api.get('/facturation/clients')
+      .then((r: { data: ClientFiche[] }) => setFiche(r.data.find(c => c.id === clientId) ?? null))
+      .catch(() => {})
+  }, [clientId])
+
+  useEffect(() => { loadFiche() }, [loadFiche])
+
+  const changed = () => { loadFiche(); onChanged?.() }
+
+  const stat = (label: string, value: string, color: string) => (
+    <Box sx={{ flex: '1 1 150px', p: 1.5, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+      <Typography fontSize={11.5} color="text.secondary" fontWeight={600}>{label}</Typography>
+      <Typography fontSize={16} fontWeight={800} color={color}>{value}</Typography>
+    </Box>
+  )
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
+        {stat('Total facturé', totaux ? fmt(totaux.facture) : '—', '#1F4E78')}
+        {stat('Total réglé', totaux ? fmt(totaux.regle) : '—', '#2E7D32')}
+        {stat('Reste à encaisser', totaux ? fmt(totaux.reste) : '—', totaux && totaux.reste > 0 ? '#C62828' : '#2E7D32')}
+        {stat(`Préfactures (${totaux?.nb_prefactures ?? 0})`, totaux ? fmt(totaux.prefactures) : '—', '#5E35B1')}
+      </Box>
+
+      <Box sx={{ mb: 2 }}>
+        <Typography fontWeight={700} fontSize={13.5} mb={1}>Contrats</Typography>
+        {!fiche || fiche.contrats.length === 0 ? (
+          <Typography fontSize={12.5} color="text.secondary">Aucun contrat pour ce client.</Typography>
+        ) : (
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {fiche.contrats.map(k => (
+              <Box key={k.id} sx={{ px: 1.5, py: 1, borderRadius: 2, border: '1px solid #E2E8F0', bgcolor: k.actif ? '#fff' : '#F8FAFC' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography fontSize={12.5} fontWeight={700}>{TYPES[k.type].label}{k.designation ? ` — ${k.designation}` : ''}</Typography>
+                  <Chip size="small" label={k.actif ? 'Actif' : 'Inactif'}
+                    sx={{ height: 18, fontSize: 10.5, fontWeight: 700, bgcolor: k.actif ? '#E8F5E9' : '#F1F5F9', color: k.actif ? '#2E7D32' : '#64748B' }} />
+                </Box>
+                <Typography fontSize={11.5} color="text.secondary">
+                  {fmt(k.montant_ht)} HT · TVA {k.taux_tva} % · {fmtDate(k.date_debut)} → {fmtDate(k.date_fin)}{k.societe ? ` · ${k.societe}` : ''}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      <FacturesTab clientId={clientId} isSuperAdmin={isSuperAdmin} onChanged={changed} onTotaux={setTotaux} />
+    </>
+  )
+}
+
 // ── Liste des factures ───────────────────────────────────────────────────────
-function FacturesTab({ clients, isSuperAdmin, onChanged }: { clients: ClientFiche[]; isSuperAdmin: boolean; onChanged: () => void }) {
+/** With clientId the list is locked on that client (client dossier): no client filter nor generation. */
+function FacturesTab({ clients = [], isSuperAdmin, onChanged, clientId, onTotaux }: {
+  clients?: ClientFiche[]; isSuperAdmin: boolean; onChanged: () => void; clientId?: number; onTotaux?: (t: Totaux) => void
+}) {
   const [factures, setFactures] = useState<Facture[]>([])
   const [societes, setSocietes] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({ societe: '', client_id: '', statut: '', origine: '', du: '', au: '', q: '' })
+  const [filters, setFilters] = useState({ societe: '', client_id: clientId ? String(clientId) : '', statut: '', origine: '', du: '', au: '', q: '' })
   const [busyId, setBusyId] = useState<number | null>(null)
   const [reglementFor, setReglementFor] = useState<Facture | null>(null)
   const [genOpen, setGenOpen] = useState(false)
@@ -184,10 +250,10 @@ function FacturesTab({ clients, isSuperAdmin, onChanged }: { clients: ClientFich
     setLoading(true)
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
     api.get('/facturation/factures', { params })
-      .then(({ data }) => { setFactures(data.factures); setSocietes(data.societes) })
+      .then(({ data }) => { setFactures(data.factures); setSocietes(data.societes); onTotaux?.(data.totaux) })
       .catch(() => toast.error('Impossible de charger les factures.'))
       .finally(() => setLoading(false))
-  }, [filters])
+  }, [filters, onTotaux])
 
   useEffect(() => {
     const t = setTimeout(load, filters.q ? 300 : 0)
@@ -251,10 +317,12 @@ function FacturesTab({ clients, isSuperAdmin, onChanged }: { clients: ClientFich
               <MenuItem value="">Toutes</MenuItem>
               {societes.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </TextField>
-            <TextField select size="small" label="Client" value={filters.client_id} onChange={e => setF('client_id', e.target.value)} sx={{ minWidth: 170 }}>
-              <MenuItem value="">Tous</MenuItem>
-              {clients.map(c => <MenuItem key={c.id} value={String(c.id)}>{c.raison_sociale || c.nom}</MenuItem>)}
-            </TextField>
+            {!clientId && (
+              <TextField select size="small" label="Client" value={filters.client_id} onChange={e => setF('client_id', e.target.value)} sx={{ minWidth: 170 }}>
+                <MenuItem value="">Tous</MenuItem>
+                {clients.map(c => <MenuItem key={c.id} value={String(c.id)}>{c.raison_sociale || c.nom}</MenuItem>)}
+              </TextField>
+            )}
             <TextField select size="small" label="État" value={filters.statut} onChange={e => setF('statut', e.target.value)} sx={{ minWidth: 130 }}>
               <MenuItem value="">Tous</MenuItem>
               {(Object.keys(ETATS) as Etat[]).map(e => <MenuItem key={e} value={e}>{ETATS[e].label}</MenuItem>)}
@@ -266,7 +334,7 @@ function FacturesTab({ clients, isSuperAdmin, onChanged }: { clients: ClientFich
             </TextField>
             <TextField size="small" type="date" label="Du" InputLabelProps={{ shrink: true }} value={filters.du} onChange={e => setF('du', e.target.value)} />
             <TextField size="small" type="date" label="Au" InputLabelProps={{ shrink: true }} value={filters.au} onChange={e => setF('au', e.target.value)} />
-            {isSuperAdmin && (
+            {isSuperAdmin && !clientId && (
               <Button variant="contained" startIcon={<AutorenewIcon />} onClick={() => setGenOpen(true)}
                 sx={{ ml: 'auto', textTransform: 'none', fontWeight: 700, borderRadius: 2, bgcolor: '#5E35B1', '&:hover': { bgcolor: '#4527A0' } }}>
                 Générer les préfactures
@@ -277,7 +345,9 @@ function FacturesTab({ clients, isSuperAdmin, onChanged }: { clients: ClientFich
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={24} /></Box>
           ) : factures.length === 0 ? (
-            <Typography color="text.secondary" fontSize={13.5} textAlign="center" py={6}>Aucune facture pour ces filtres.</Typography>
+            <Typography color="text.secondary" fontSize={13.5} textAlign="center" py={6}>
+              {clientId ? 'Aucune facture ni préfacture pour ce client.' : 'Aucune facture pour ces filtres.'}
+            </Typography>
           ) : (
             <Box sx={{ overflowX: 'auto', maxHeight: '65vh', overflowY: 'auto' }}>
               <Table size="small" stickyHeader sx={{ minWidth: 1100 }}>

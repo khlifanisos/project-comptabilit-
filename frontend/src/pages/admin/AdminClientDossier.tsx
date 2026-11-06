@@ -14,11 +14,13 @@ import GroupsIcon          from '@mui/icons-material/Groups'
 import CalendarTodayIcon   from '@mui/icons-material/CalendarToday'
 import FolderIcon          from '@mui/icons-material/Folder'
 import TableChartIcon      from '@mui/icons-material/TableChart'
+import ReceiptLongIcon     from '@mui/icons-material/ReceiptLong'
 import DownloadIcon        from '@mui/icons-material/Download'
 import DeleteOutlineIcon   from '@mui/icons-material/DeleteOutline'
 import toast from 'react-hot-toast'
 import api from '../../api/axios'
 import DocumentsTable from '../../components/admin/DocumentsTable'
+import { ClientFacturationFolder } from './AdminFacturation'
 import {
   DocRow, DocSource, DOC_SOURCES, SOURCE_API, TYPE_LABEL,
   FOLDER_LABEL, FOLDER_ORDER,
@@ -65,10 +67,21 @@ export default function AdminClientDossier() {
   const [client, setClient]   = useState<ClientInfo | null>(null)
   const [docs, setDocs]       = useState<DocRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [folder, setFolder]   = useState<DocSource | 'excel' | null>(null)
+  const [folder, setFolder]   = useState<DocSource | 'excel' | 'facturation' | null>(null)
 
   const [excelExports, setExcelExports]   = useState<ExcelExportRow[]>([])
   const [excelDeletingId, setExcelDeletingId] = useState<number | null>(null)
+
+  // Facturation folder card: number of invoices/préfactures, and how many still need action.
+  const [factStats, setFactStats] = useState({ total: 0, aTraiter: 0 })
+  const loadFactStats = useCallback(() => {
+    api.get('/facturation/factures', { params: { client_id: clientId } })
+      .then(({ data }: { data: { factures: { etat: string }[] } }) => setFactStats({
+        total: data.factures.length,
+        aTraiter: data.factures.filter(f => f.etat !== 'reglee').length,
+      }))
+      .catch(() => {})
+  }, [clientId])
 
   const loadExcelExports = useCallback(() => {
     api.get('/excel-exports', { params: { client_id: clientId } })
@@ -85,6 +98,7 @@ export default function AdminClientDossier() {
     } catch { toast.error('Impossible de charger le client.') }
 
     loadExcelExports()
+    loadFactStats()
 
     const results = await Promise.allSettled(
       DOC_SOURCES.map(s => api.get(`/${SOURCE_API[s]}`))
@@ -116,7 +130,7 @@ export default function AdminClientDossier() {
     rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     setDocs(rows)
     setLoading(false)
-  }, [clientId, loadExcelExports])
+  }, [clientId, loadExcelExports, loadFactStats])
 
   useEffect(() => { load() }, [load])
 
@@ -251,7 +265,53 @@ export default function AdminClientDossier() {
               </Box>
             </CardContent>
           </Card>
+
+          {/* Facturation — factures, préfactures, règlements et contrats du client */}
+          <Card
+            onClick={() => setFolder('facturation')}
+            sx={{
+              borderRadius: 3, cursor: 'pointer', transition: 'all .15s',
+              '&:hover': { boxShadow: '0 6px 20px rgba(31,78,120,0.15)', transform: 'translateY(-2px)' },
+            }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2.5 }}>
+              <Box sx={{
+                width: 48, height: 48, borderRadius: 2.5, flexShrink: 0,
+                background: 'linear-gradient(135deg,#1F4E78,#0D2E4D)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', '& svg': { fontSize: 24 },
+              }}>
+                <ReceiptLongIcon />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography fontWeight={700} fontSize={14} noWrap>Facturation</Typography>
+                <Typography fontSize={12} color="text.secondary">
+                  {factStats.total} facture{factStats.total !== 1 ? 's' : ''} et préfacture{factStats.total !== 1 ? 's' : ''}
+                </Typography>
+              </Box>
+              {factStats.aTraiter > 0 && (
+                <Tooltip title="Préfactures à valider ou factures non réglées">
+                  <Chip label={factStats.aTraiter} size="small"
+                    sx={{ bgcolor: '#FFF3E0', color: '#E65100', fontWeight: 700, fontSize: 11 }} />
+                </Tooltip>
+              )}
+            </CardContent>
+          </Card>
         </Box>
+      ) : folder === 'facturation' ? (
+        <Card sx={{ borderRadius: 3 }}>
+          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+              <Tooltip title="Retour aux dossiers">
+                <IconButton size="small" onClick={() => { setFolder(null); loadFactStats() }}>
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <ReceiptLongIcon sx={{ color: '#1F4E78', fontSize: 20 }} />
+              <Typography fontWeight={700} fontSize={16}>Facturation</Typography>
+            </Box>
+            <ClientFacturationFolder clientId={clientId} onChanged={loadFactStats} />
+          </CardContent>
+        </Card>
       ) : folder === 'excel' ? (
         <Card sx={{ borderRadius: 3 }}>
           <CardContent sx={{ p: { xs: 2, md: 3 } }}>
