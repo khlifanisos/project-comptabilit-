@@ -278,14 +278,15 @@ class AuditBalanceController extends Controller
      *   summing both Solde columns.
      * - "Uniquement {N-1}" / "Uniquement {N}": accounts found in only one balance.
      * - "Section X": one sheet per audit section; the letters in column G link to them.
-     *   Its Référence column links each account whose balance moved to its entries
-     *   in the "GL Section X" sheet that follows (when a grand livre is imported).
+     *   Its Référence column gives every account an audit reference (R500, R510…),
+     *   linked to its entries in the "GL Section X" sheet that follows (when a grand
+     *   livre is imported and holds the account).
      * Column headers and sheet names carry the fiscal years (?annee=N, default last year).
      * ?section=T exports only that section's sheet.
      */
     public function exportConsolidation(Request $request)
     {
-        // The "GL Section X" sheets hold the whole grand livre of the moved accounts:
+        // The "GL Section X" sheets hold the whole grand livre of the section's accounts:
         // ~150 MB and ~25 s for 15 000 lines, past PHP's default 128 MB / 30 s.
         if (SpreadsheetRowReader::bytes((string) ini_get('memory_limit')) < 512 * 1048576) {
             ini_set('memory_limit', '512M');
@@ -317,9 +318,9 @@ class AuditBalanceController extends Controller
         $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
 
         $section = strtoupper(trim((string) $request->input('section', '')));
-        $moved = array_filter($consolidation, fn ($r) => abs($r['variation']) >= 0.0005
+        $inSections = array_filter($consolidation, fn ($r) => $r['section'] !== ''
             && ($section === '' || $r['section'] === $section));
-        $glLines = $this->grandLivreParCompte($clientId, array_column($moved, 'compte'));
+        $glLines = $this->grandLivreParCompte($clientId, array_column($inSections, 'compte'));
 
         if ($section !== '') {
             $rows = array_values(array_filter($consolidation, fn ($r) => $r['section'] === $section));
@@ -448,46 +449,52 @@ class AuditBalanceController extends Controller
     }
 
     /**
-     * "GL Section X", right after its section sheet: one block per account whose balance
-     * moved, its entries as they are in the grand livre. The account's Référence cell
-     * (column F of the section sheet) links to its first entry, which links back.
+     * Audit references in column F of the section sheet: section letter + 500, 510,
+     * 520… in the section's order, whether the balance moved or not. "GL Section X",
+     * right after the section sheet, holds one block per account found in the grand
+     * livre, its entries as they are there; the reference links to the block's first
+     * entry, which links back. An account the grand livre doesn't hold reads
+     * "Absent du GL" and takes no number, so the references stay consecutive.
+     * Without an imported grand livre every account is simply numbered.
      */
     private function writeGrandLivreSheet(Spreadsheet $spreadsheet, $sectionSheet, array $rows, ?array $glLines): void
     {
-        if ($glLines === null) {
-            return;
-        }
-        $moved = array_filter($rows, fn ($row) => abs($row['variation']) >= 0.0005);
-        if (!$moved) {
-            return;
-        }
-
         $sectionTitle = $sectionSheet->getTitle();
         $title = "GL {$sectionTitle}";
-        $gl = $this->newSheet($spreadsheet, $title);
-        $this->writeHeader($gl, ['Compte', 'Date', 'Libellé', 'Débit', 'Crédit', 'Solde']);
-        $gl->setCellValue('H1', "← {$sectionTitle}");
-        $gl->getCell('H1')->getHyperlink()->setUrl("sheet://'{$sectionTitle}'!A1");
-        $gl->getStyle('H1')->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+        $hasGl = $glLines !== null
+            && array_filter($rows, fn ($row) => !empty($glLines[$row['compte']]));
+
+        $gl = null;
+        if ($hasGl) {
+            $gl = $this->newSheet($spreadsheet, $title);
+            $this->writeHeader($gl, ['Compte', 'Date', 'Libellé', 'Débit', 'Crédit', 'Solde']);
+            $gl->setCellValue('H1', "← {$sectionTitle}");
+            $gl->getCell('H1')->getHyperlink()->setUrl("sheet://'{$sectionTitle}'!A1");
+            $gl->getStyle('H1')->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
+        }
 
         // Styles are applied once at the end: one range call per block is what makes
         // PhpSpreadsheet slow on a full grand livre.
         $firstRows = [];
         $n = 0;
         $r = 2;
-        foreach ($moved as $i => $row) {
+        foreach ($rows as $i => $row) {
             $sr = $i + 2; // row of this account in the section sheet
             $ref = $sectionSheet->getCell("F{$sr}");
             $lignes = $glLines[$row['compte']] ?? [];
-            if (!$lignes) {
+
+            if ($glLines !== null && !$lignes) {
                 $ref->setValue('Absent du GL');
                 $sectionSheet->getStyle("F{$sr}")->getFont()->setItalic(true)->getColor()->setRGB('94A3B8');
                 continue;
             }
 
-            // Audit reference: section letter + 500, 510, 520… in the section's order.
             $code = $row['section'] . (500 + 10 * $n++);
             $ref->setValue($code);
+            if (!$gl) {
+                continue;
+            }
+
             $ref->getHyperlink()->setUrl("sheet://'{$title}'!A{$r}")->setTooltip("Voir le grand livre du compte {$row['compte']}");
             $sectionSheet->getStyle("F{$sr}")->getFont()->setUnderline(true)->getColor()->setRGB('0563C1');
 
@@ -506,6 +513,10 @@ class AuditBalanceController extends Controller
                 $r++;
             }
             $r++; // blank spacer between accounts
+        }
+
+        if (!$gl) {
+            return;
         }
 
         $end = $r - 2;
