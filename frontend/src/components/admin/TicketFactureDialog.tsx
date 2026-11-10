@@ -42,11 +42,14 @@ interface FactureForm {
   lignes: Ligne[]
   remise_acc_taux: number
   timbre: number
+  retenue_source: boolean
 }
 
 export interface FactureSummary { id: number; ticket_id: number; numero: string; statut: StatutFacture; net_facture: number }
 
 const TAUX_TVA = [0, 7, 13, 19]
+/** Retenue à la source on honoraires (TicketFactureController::TAUX_RETENUE). */
+const TAUX_RETENUE = 3
 const MODES_PAIEMENT = ['Espèces', 'Chèque', 'Virement', 'Traite', 'Carte bancaire']
 const emptyLigne = (): Ligne => ({ designation: '', debours: false, qt: 0, pu_ht: 0, tva: 19, remise: 0 })
 
@@ -96,8 +99,12 @@ function NumField({ value, onValue, max, sx, placeholder }: { value: number; onV
   )
 }
 
-/** Same rules as TicketFactureController::computeTotals — the server recomputes on save. */
-function computeTotals(lignes: Ligne[], remiseAccTaux: number, timbre: number) {
+/**
+ * Same rules as TicketFactureController::computeTotals — the server recomputes on save.
+ * The retenue à la source is TAUX_RETENUE % of the honoraires TTC (HT + TVA, without
+ * débours nor timbre); the invoice keeps its TTC and the net to pay is TTC − retenue.
+ */
+function computeTotals(lignes: Ligne[], remiseAccTaux: number, timbre: number, retenue: boolean) {
   const bases: Record<number, number> = { 0: 0, 7: 0, 13: 0, 19: 0 }
   let debours = 0
   for (const l of lignes) {
@@ -113,7 +120,8 @@ function computeTotals(lignes: Ligne[], remiseAccTaux: number, timbre: number) {
     tva += bases[t] * t / 100
   }
   const ttc = ht + tva + debours + timbre
-  return { bases, brut, remiseAcc, ht, tva, debours, ttc }
+  const montantRetenue = retenue ? Math.round((ht + tva) * TAUX_RETENUE * 10) / 1000 : 0
+  return { bases, brut, remiseAcc, ht, tva, debours, ttc, montantRetenue, net: ttc - montantRetenue }
 }
 
 // ── Desktop-form look ("Bon d'Intervention") ─────────────────────────────────
@@ -163,7 +171,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
     api.get(`/tickets/${ticketId}/facturation`)
       .then(({ data }) => {
         const f = data.facture
-        setForm({ ...f, date_facture: String(f.date_facture).slice(0, 10), mode_paiement: f.mode_paiement ?? '', observation: f.observation ?? '', exercice: f.exercice ?? '', client_code: f.client_code ?? '', societe: f.societe ?? '' })
+        setForm({ ...f, date_facture: String(f.date_facture).slice(0, 10), mode_paiement: f.mode_paiement ?? '', observation: f.observation ?? '', exercice: f.exercice ?? '', client_code: f.client_code ?? '', societe: f.societe ?? '', retenue_source: !!f.retenue_source })
         setExists(data.existe)
         setClientIu(data.client_iu ?? null)
         setRegle(Number(data.regle ?? 0))
@@ -173,7 +181,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
   }, [ticketId, onClose])
 
   const totals = useMemo(
-    () => form ? computeTotals(form.lignes, form.remise_acc_taux || 0, form.timbre || 0) : null,
+    () => form ? computeTotals(form.lignes, form.remise_acc_taux || 0, form.timbre || 0, form.retenue_source) : null,
     [form],
   )
 
@@ -319,7 +327,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
             </Box>
 
             <Box sx={{ alignSelf: 'center', bgcolor: '#E53935', color: '#fff', px: 3, py: 1.25, borderRadius: 1, minWidth: 170, textAlign: 'right', boxShadow: 'inset 0 -2px 0 rgba(0,0,0,.15)' }}>
-              <Typography fontSize={22} fontWeight={700} lineHeight={1}>{fmt(totals.ttc)}</Typography>
+              <Typography fontSize={22} fontWeight={700} lineHeight={1}>{fmt(totals.net)}</Typography>
             </Box>
           </Box>
 
@@ -446,8 +454,17 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
 
               <Typography sx={lbl()}>Mnt HT</Typography>
               <InputBase readOnly value={fmt(totals.ht)} sx={amountBox} />
+              <FormControlLabel sx={{ m: 0 }}
+                control={<Checkbox size="small" sx={{ p: 0.1, mr: 0.5, '& svg': { fontSize: 16 } }} checked={form.retenue_source}
+                  onChange={e => set('retenue_source', e.target.checked)} />}
+                label={<Typography sx={lbl()}>Ret. Source {TAUX_RETENUE} %</Typography>} />
+              <Tooltip title={`${TAUX_RETENUE} % des honoraires TTC (HT + TVA), hors débours et timbre`}>
+                <InputBase readOnly value={form.retenue_source ? `− ${fmt(totals.montantRetenue)}` : fmt(0)} sx={amountBox} />
+              </Tooltip>
+
+              <Box sx={{ gridColumn: '1 / 3' }} />
               <Typography sx={lbl()}>Net Facture</Typography>
-              <InputBase readOnly value={fmt(totals.ttc)} sx={{ ...amountBox, fontWeight: 700 }} />
+              <InputBase readOnly value={fmt(totals.net)} sx={{ ...amountBox, fontWeight: 700 }} />
 
               <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 1.25, mt: 0.5 }}>
                 {/* Identifiant unique of the client, from the fiche client (Facturation › Fiches clients). */}
@@ -460,7 +477,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
                 {exists && (
                   <Typography sx={{ fontSize: 11.5, color: C.label, textAlign: 'right', lineHeight: 1.3 }}>
                     Réglé <b style={{ color: '#2E7D32' }}>{fmt(regle)}</b><br />
-                    Reste <b style={{ color: totals.ttc - regle > 0.0005 ? C.red : '#2E7D32' }}>{fmt(Math.max(0, totals.ttc - regle))}</b>
+                    Reste <b style={{ color: totals.net - regle > 0.0005 ? C.red : '#2E7D32' }}>{fmt(Math.max(0, totals.net - regle))}</b>
                   </Typography>
                 )}
                 <Tooltip title={form.statut === 'en_instance' ? 'La facture doit être « Facturé » pour recevoir un règlement' : ''}>

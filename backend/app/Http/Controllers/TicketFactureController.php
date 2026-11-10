@@ -20,6 +20,9 @@ class TicketFactureController extends Controller
     /** Tunisian TVA rates offered on each line. */
     private const TAUX_TVA = [0, 7, 13, 19];
 
+    /** Retenue à la source on honoraires, in %. */
+    public const TAUX_RETENUE = 3;
+
     private function canAccess(Administrateur $admin, Ticket $ticket): bool
     {
         return $admin->is_super_admin || $ticket->created_by === $admin->id || $ticket->assigned_to === $admin->id;
@@ -79,6 +82,7 @@ class TicketFactureController extends Controller
                 ]],
                 'remise_acc_taux' => 0,
                 'timbre'          => 0,
+                'retenue_source'  => false,
             ],
         ]);
     }
@@ -117,6 +121,7 @@ class TicketFactureController extends Controller
             'lignes.*.remise'       => 'nullable|numeric|min:0|max:100',
             'remise_acc_taux'       => 'nullable|numeric|min:0|max:100',
             'timbre'                => 'nullable|numeric|min:0',
+            'retenue_source'        => 'boolean',
         ]);
 
         $lignes = array_map(fn ($l) => [
@@ -128,7 +133,7 @@ class TicketFactureController extends Controller
             'remise'      => (float) ($l['remise'] ?? 0),
         ], $validated['lignes']);
 
-        $totaux = self::computeTotals($lignes, (float) ($validated['remise_acc_taux'] ?? 0), (float) ($validated['timbre'] ?? 1));
+        $totaux = self::computeTotals($lignes, (float) ($validated['remise_acc_taux'] ?? 0), (float) ($validated['timbre'] ?? 1), (bool) ($validated['retenue_source'] ?? false));
 
         $data = array_merge($validated, $totaux, [
             'lignes'          => $lignes,
@@ -183,12 +188,16 @@ class TicketFactureController extends Controller
     }
 
     /**
+     * With $retenue, the client withholds TAUX_RETENUE % of the honoraires TTC
+     * (HT + TVA; débours and timbre are not honoraires): the invoice keeps its
+     * TTC and the net to pay becomes TTC − retenue.
+     *
      * Line total = QT × PU HT − line remise %. Débours lines are re-billed at
      * cost: no TVA, no accumulated remise, added straight to the TTC. The
      * "Remise Acc." % applies to the taxable total and is spread pro-rata over
      * each TVA base. TTC = HT + TVA + Débours + Timbre.
      */
-    public static function computeTotals(array $lignes, float $remiseAccTaux, float $timbre): array
+    public static function computeTotals(array $lignes, float $remiseAccTaux, float $timbre, bool $retenue = false): array
     {
         $bases   = array_fill_keys(array_map('strval', self::TAUX_TVA), 0.0);
         $debours = 0.0;
@@ -213,6 +222,7 @@ class TicketFactureController extends Controller
         }
 
         $ttc = $ht + round($tva, 3) + $debours + $timbre;
+        $montantRetenue = $retenue ? round(($ht + round($tva, 3)) * self::TAUX_RETENUE / 100, 3) : 0.0;
 
         return [
             'montant_brut'    => round($brut, 3),
@@ -221,7 +231,8 @@ class TicketFactureController extends Controller
             'montant_ht'      => round($ht, 3),
             'montant_tva'     => round($tva, 3),
             'montant_ttc'     => round($ttc, 3),
-            'net_facture'     => round($ttc, 3),
+            'montant_retenue' => $montantRetenue,
+            'net_facture'     => round($ttc - $montantRetenue, 3),
             'bases_tva'       => $bases,
         ];
     }

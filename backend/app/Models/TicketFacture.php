@@ -15,7 +15,7 @@ class TicketFacture extends Model
         'ticket_id', 'client_id', 'contrat_id', 'periode_debut', 'periode_fin', 'created_by', 'numero', 'date_facture', 'societe',
         'client_code', 'client_nom', 'observation', 'exercice', 'statut', 'mode_paiement',
         'duplicata', 'tampon', 'sans_en_tete',
-        'lignes', 'remise_acc_taux', 'timbre',
+        'lignes', 'remise_acc_taux', 'timbre', 'retenue_source', 'montant_retenue',
         'montant_brut', 'remise_acc', 'montant_debours', 'montant_ht',
         'montant_tva', 'montant_ttc', 'net_facture', 'bases_tva',
     ];
@@ -27,6 +27,8 @@ class TicketFacture extends Model
         'duplicata'       => 'boolean',
         'tampon'          => 'boolean',
         'sans_en_tete'    => 'boolean',
+        'retenue_source'  => 'boolean',
+        'montant_retenue' => 'float',
         'lignes'          => 'array',
         'bases_tva'       => 'array',
         'remise_acc_taux' => 'float',
