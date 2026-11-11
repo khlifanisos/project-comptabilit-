@@ -1,0 +1,45 @@
+# Usage:  docker compose up -d --build     then open http://localhost:8080
+# Config: .env.docker (copy from .env.docker.example)
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    env_file: .env.docker
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # Uncomment to reach MySQL from your PC (e.g. HeidiSQL, DBeaver) on port 3307:
+    # ports:
+    #   - "3307:3306"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend-storage:/var/www/html/storage
+      - avatars:/var/www/html/public/uploads
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      - backend-storage:/var/www/html/storage:ro
+      - avatars:/var/www/html/public/uploads:ro
+
+volumes:
+  db-data:
+  backend-storage:
+  avatars:

@@ -37,3 +37,8 @@ backend/test_storage.php
 
 # Uploads (user data, not source code)
 backend/public/uploads/avatars/
+# Docker env (contains secrets)
+.env.docker
+
+# Real database dumps (client data) — never commit
+/comptabilite_db*.sql
