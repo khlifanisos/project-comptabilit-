@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 class TicketFactureController extends Controller
 {
-    /** Tunisian TVA rates offered on each line. */
-    private const TAUX_TVA = [0, 7, 13, 19];
+    /** Single TVA rate applied to every honoraire line (débours are hors TVA). */
+    public const TAUX_TVA = 19;
 
     /** Retenue à la source on honoraires, in %. */
     public const TAUX_RETENUE = 3;
@@ -77,7 +77,7 @@ class TicketFactureController extends Controller
                     'debours'     => false,
                     'qt'          => 0,
                     'pu_ht'       => 0,
-                    'tva'         => 19,
+                    'tva'         => self::TAUX_TVA,
                     'remise'      => 0,
                 ]],
                 'remise_acc_taux' => 0,
@@ -117,7 +117,6 @@ class TicketFactureController extends Controller
             'lignes.*.debours'      => 'boolean',
             'lignes.*.qt'           => 'required|numeric|min:0',
             'lignes.*.pu_ht'        => 'required|numeric|min:0',
-            'lignes.*.tva'          => 'required|in:' . implode(',', self::TAUX_TVA),
             'lignes.*.remise'       => 'nullable|numeric|min:0|max:100',
             'remise_acc_taux'       => 'nullable|numeric|min:0|max:100',
             'timbre'                => 'nullable|numeric|min:0',
@@ -129,7 +128,7 @@ class TicketFactureController extends Controller
             'debours'     => (bool) ($l['debours'] ?? false),
             'qt'          => (float) $l['qt'],
             'pu_ht'       => (float) $l['pu_ht'],
-            'tva'         => (int) $l['tva'],
+            'tva'         => ($l['debours'] ?? false) ? 0 : self::TAUX_TVA,
             'remise'      => (float) ($l['remise'] ?? 0),
         ], $validated['lignes']);
 
@@ -193,13 +192,14 @@ class TicketFactureController extends Controller
      * TTC and the net to pay becomes TTC − retenue.
      *
      * Line total = QT × PU HT − line remise %. Débours lines are re-billed at
-     * cost: no TVA, no accumulated remise, added straight to the TTC. The
-     * "Remise Acc." % applies to the taxable total and is spread pro-rata over
-     * each TVA base. TTC = HT + TVA + Débours + Timbre.
+     * cost: no TVA, no accumulated remise, added straight to the TTC. Every
+     * other line is taxed at the single TAUX_TVA rate, whatever rate it was
+     * saved with. The "Remise Acc." % applies to the taxable total.
+     * TTC = HT + TVA + Débours + Timbre.
      */
     public static function computeTotals(array $lignes, float $remiseAccTaux, float $timbre, bool $retenue = false): array
     {
-        $bases   = array_fill_keys(array_map('strval', self::TAUX_TVA), 0.0);
+        $bases   = [(string) self::TAUX_TVA => 0.0];
         $debours = 0.0;
 
         foreach ($lignes as $l) {
@@ -207,7 +207,7 @@ class TicketFactureController extends Controller
             if ($l['debours']) {
                 $debours += $net;
             } else {
-                $bases[(string) $l['tva']] += $net;
+                $bases[(string) self::TAUX_TVA] += $net;
             }
         }
 

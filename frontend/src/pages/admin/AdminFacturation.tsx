@@ -220,7 +220,7 @@ export function ClientFacturationFolder({ clientId, onChanged }: { clientId: num
                     sx={{ height: 18, fontSize: 10.5, fontWeight: 700, bgcolor: k.actif ? '#E8F5E9' : '#F1F5F9', color: k.actif ? '#2E7D32' : '#64748B' }} />
                 </Box>
                 <Typography fontSize={11.5} color="text.secondary">
-                  {fmt(k.montant_ht)} HT · TVA {k.taux_tva} % · {fmtDate(k.date_debut)} → {fmtDate(k.date_fin)}{k.societe ? ` · ${k.societe}` : ''}
+                  {fmt(k.montant_ht)} HT · TVA 19 % · {fmtDate(k.date_debut)} → {fmtDate(k.date_fin)}{k.societe ? ` · ${k.societe}` : ''}
                 </Typography>
               </Box>
             ))}
@@ -725,7 +725,7 @@ function ContratsTab({ clients, isSuperAdmin, reload }: { clients: ClientFiche[]
                     <TableCell sx={{ fontSize: 12.5 }}>{k.designation || <Missing />}</TableCell>
                     <TableCell sx={{ fontSize: 12.5 }}>{TYPES[k.type].label}</TableCell>
                     <TableCell sx={{ fontSize: 12.5, fontWeight: 700 }} align="right">{fmt(k.montant_ht)}</TableCell>
-                    <TableCell sx={{ fontSize: 12.5 }}>{k.taux_tva} %</TableCell>
+                    <TableCell sx={{ fontSize: 12.5 }}>19 %</TableCell>
                     <TableCell sx={{ fontSize: 12.5 }}>{fmtDate(k.date_debut)}</TableCell>
                     <TableCell sx={{ fontSize: 12.5 }}>{k.date_fin ? fmtDate(k.date_fin) : 'Indéterminée'}</TableCell>
                     <TableCell>
@@ -821,9 +821,7 @@ function ContratDialog({ target, clients, onClose, onSaved }: {
               helperText={mois > 1 && montant > 0 ? `soit ${fmt(montant / mois)} / mois` : ' '} />
           </Grid>
           <Grid item xs={5} sm={3}>
-            <TextField select fullWidth size="small" label="TVA" value={form.taux_tva} onChange={e => setForm(f => ({ ...f, taux_tva: Number(e.target.value) }))}>
-              {[0, 7, 13, 19].map(t => <MenuItem key={t} value={t}>{t} %</MenuItem>)}
-            </TextField>
+            <TextField fullWidth size="small" label="TVA" value="19 %" InputProps={{ readOnly: true }} />
           </Grid>
           <Grid item xs={6}>
             <TextField fullWidth size="small" type="date" label="Date de début" InputLabelProps={{ shrink: true }} value={form.date_debut}

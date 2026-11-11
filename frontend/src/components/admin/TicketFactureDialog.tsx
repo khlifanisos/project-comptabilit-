@@ -47,11 +47,12 @@ interface FactureForm {
 
 export interface FactureSummary { id: number; ticket_id: number; numero: string; statut: StatutFacture; net_facture: number }
 
-const TAUX_TVA = [0, 7, 13, 19]
+/** Single TVA rate on honoraires (TicketFactureController::TAUX_TVA); débours are hors TVA. */
+const TAUX_TVA = 19
 /** Retenue à la source on honoraires (TicketFactureController::TAUX_RETENUE). */
 const TAUX_RETENUE = 3
 const MODES_PAIEMENT = ['Espèces', 'Chèque', 'Virement', 'Traite', 'Carte bancaire']
-const emptyLigne = (): Ligne => ({ designation: '', debours: false, qt: 0, pu_ht: 0, tva: 19, remise: 0 })
+const emptyLigne = (): Ligne => ({ designation: '', debours: false, qt: 0, pu_ht: 0, tva: TAUX_TVA, remise: 0 })
 
 const fmt = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 const lineNet = (l: Ligne) => l.qt * l.pu_ht * (1 - (l.remise || 0) / 100)
@@ -105,23 +106,19 @@ function NumField({ value, onValue, max, sx, placeholder }: { value: number; onV
  * débours nor timbre); the invoice keeps its TTC and the net to pay is TTC − retenue.
  */
 function computeTotals(lignes: Ligne[], remiseAccTaux: number, timbre: number, retenue: boolean) {
-  const bases: Record<number, number> = { 0: 0, 7: 0, 13: 0, 19: 0 }
+  let brut = 0
   let debours = 0
   for (const l of lignes) {
     if (l.debours) debours += lineNet(l)
-    else bases[l.tva] = (bases[l.tva] ?? 0) + lineNet(l)
+    else brut += lineNet(l)
   }
-  const brut = Object.values(bases).reduce((a, b) => a + b, 0)
   const remiseAcc = brut * remiseAccTaux / 100
   const ht = brut - remiseAcc
-  let tva = 0
-  for (const t of TAUX_TVA) {
-    bases[t] = bases[t] * (1 - remiseAccTaux / 100)
-    tva += bases[t] * t / 100
-  }
+  const base = ht
+  const tva = Math.round(base * TAUX_TVA * 10) / 1000
   const ttc = ht + tva + debours + timbre
   const montantRetenue = retenue ? Math.round((ht + tva) * TAUX_RETENUE * 10) / 1000 : 0
-  return { bases, brut, remiseAcc, ht, tva, debours, ttc, montantRetenue, net: ttc - montantRetenue }
+  return { base, brut, remiseAcc, ht, tva, debours, ttc, montantRetenue, net: ttc - montantRetenue }
 }
 
 // ── Desktop-form look ("Bon d'Intervention") ─────────────────────────────────
@@ -388,11 +385,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
                       <td><NumField value={l.qt} onValue={qt => setLigne(i, { qt })} sx={cellInput} placeholder="0" /></td>
                       <td><NumField value={l.pu_ht} onValue={pu_ht => setLigne(i, { pu_ht })} sx={cellInput} placeholder="0,000" /></td>
                       <td>
-                        <Select variant="standard" disableUnderline value={l.tva} disabled={l.debours}
-                          onChange={e => setLigne(i, { tva: Number(e.target.value) })}
-                          sx={{ width: '100%', fontSize: 12, '& .MuiSelect-select': { py: '3px', pr: '18px !important', textAlign: 'right' } }}>
-                          {TAUX_TVA.map(t => <MenuItem key={t} value={t} sx={{ fontSize: 12 }}>{t} %</MenuItem>)}
-                        </Select>
+                        <Box sx={{ textAlign: 'right', px: 0.75, color: l.debours ? '#94A3B8' : '#333' }}>{l.debours ? 'Hors TVA' : `${TAUX_TVA} %`}</Box>
                       </td>
                       <td><NumField value={l.remise} max={100} onValue={remise => setLigne(i, { remise })} sx={cellInput} placeholder="0 %" /></td>
                       <Box component="td" sx={{ textAlign: 'right', px: 0.75, fontWeight: 600 }}>{fmt(lineNet(l))}</Box>
@@ -406,14 +399,11 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
           {/* ── Footer: TVA bases + totals ───────────────────────────────── */}
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Box sx={{ flex: 1, minWidth: 330, bgcolor: C.panel, border: `1px solid ${C.border}`, borderRadius: 1, p: 1.25 }}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.75 }}>
-                {TAUX_TVA.map(t => (
-                  <Box key={t}>
-                    <Typography sx={{ ...lbl(), fontSize: 11 }}>{t === 0 ? 'Base Exo' : `Base ${t}%`}</Typography>
-                    <InputBase readOnly value={fmt(totals.bases[t])} sx={amountBox} />
-                    <InputBase readOnly value={fmt(totals.bases[t] * t / 100)} sx={{ ...amountBox, mt: 0.5 }} />
-                  </Box>
-                ))}
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 1.25, alignItems: 'center' }}>
+                <Typography sx={{ ...lbl(), fontSize: 11 }}>Base {TAUX_TVA}%</Typography>
+                <InputBase readOnly value={fmt(totals.base)} sx={amountBox} />
+                <Typography sx={{ ...lbl(), fontSize: 11 }}>TVA {TAUX_TVA}%</Typography>
+                <InputBase readOnly value={fmt(totals.tva)} sx={amountBox} />
               </Box>
               <Box sx={{ display: 'flex', gap: 2, mt: 1.25, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>

@@ -342,7 +342,7 @@ class FacturationController extends Controller
                 'debours'     => false,
                 'qt'          => 1,
                 'pu_ht'       => round($contrat->montant_ht * $ratio, 3),
-                'tva'         => $contrat->taux_tva,
+                'tva'         => TicketFactureController::TAUX_TVA,
                 'remise'      => 0,
             ]];
 
@@ -424,7 +424,7 @@ class FacturationController extends Controller
             'designation' => 'nullable|string|max:255',
             'type'        => 'required|in:mensuelle,trimestrielle,semestrielle,annuelle,mission',
             'montant_ht'  => 'required|numeric|min:0',
-            'taux_tva'    => 'required|in:0,7,13,19',
+            'taux_tva'    => 'nullable|in:' . TicketFactureController::TAUX_TVA,
             'date_debut'  => 'required|date',
             'date_fin'    => 'nullable|date|after_or_equal:date_debut',
             'actif'       => 'boolean',

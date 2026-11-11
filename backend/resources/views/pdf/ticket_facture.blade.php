@@ -38,6 +38,10 @@
 
     $tauxRetenue = \App\Http\Controllers\TicketFactureController::TAUX_RETENUE;
 
+    // Large layout fills the A4 page; long invoices tighten the rows to stay on one page.
+    $nbLignes = count($f->lignes);
+    $densite  = $nbLignes > 8 ? 'dense' : ($nbLignes > 4 ? 'compact' : '');
+
     // Doit / Adresse: the client's fiche when there is one, else what was typed on the invoice.
     $doitNom = $client?->raison_sociale ?: $f->client_nom;
     $idFiscal = $client?->matricule_fiscale;
@@ -51,62 +55,75 @@
 <head>
 <meta charset="UTF-8">
 <style>
-    @page { margin: 34px 44px 92px; }
+    @page { margin: 28px 34px 96px; }
     /* No universal reset: dompdf applies the @page margins to the root element. */
     body, div, table, th, td { margin: 0; padding: 0; }
-    body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 9.5px; color: #334155; }
+    body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11.5px; color: #334155; }
     table { border-collapse: collapse; width: 100%; }
     td, th { vertical-align: middle; }
     .r { text-align: right; }
     .c { text-align: center; }
     .b { font-weight: bold; }
     .soft { color: #64748B; }
-    .lbl { font-size: 7.5px; text-transform: uppercase; letter-spacing: 1px; color: #7A889A; }
+    .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #7A889A; }
 
-    .logo-txt { font-size: 40px; font-weight: bold; letter-spacing: 3px; color: #2C4A68; line-height: 1; }
-    .logo-sub { font-size: 7.5px; color: #7A889A; margin-top: 4px; }
-    .activite { font-size: 14px; font-weight: bold; color: #2C4A68; letter-spacing: .5px; }
-    .qualite { font-size: 9.5px; color: #4F7FA8; margin-top: 3px; }
-    .rule { border-top: 2px solid #A9C4DC; margin: 16px 0 0; }
+    .logo-txt { font-size: 54px; font-weight: bold; letter-spacing: 3px; color: #2C4A68; line-height: 1; }
+    .logo-sub { font-size: 9px; color: #7A889A; margin-top: 4px; }
+    .activite { font-size: 18px; font-weight: bold; color: #2C4A68; letter-spacing: .5px; }
+    .qualite { font-size: 12px; color: #4F7FA8; margin-top: 3px; }
+    .rule { border-top: 2px solid #A9C4DC; margin: 18px 0 0; }
 
-    .titre { font-size: 17px; letter-spacing: 2px; color: #4F7FA8; }
-    .meta td { padding: 2px 0; font-size: 10px; }
-    .box { border: 1px solid #D3DDE7; border-radius: 10px; background: #F7FAFD; padding: 10px 12px; height: 46px; text-align: center; }
+    .titre { font-size: 22px; letter-spacing: 2px; color: #4F7FA8; }
+    .meta td { padding: 3px 0; font-size: 12.5px; }
+    .box { border: 1px solid #D3DDE7; border-radius: 10px; background: #F7FAFD; padding: 14px 16px; height: 62px; text-align: center; }
 
     .grid { border: 1px solid #D3DDE7; }
-    .grid th { background: #E6EEF6; color: #3F5B78; font-size: 7.5px; font-weight: normal; text-transform: uppercase;
-               letter-spacing: .8px; padding: 7px 8px; border-bottom: 1px solid #D3DDE7; }
-    .grid td { padding: 5px 8px; border-left: 1px solid #E1E8EF; border-bottom: 1px solid #E6ECF2; }
+    .grid th { background: #E6EEF6; color: #3F5B78; font-size: 9.5px; font-weight: normal; text-transform: uppercase;
+               letter-spacing: .8px; padding: 10px 10px; border-bottom: 1px solid #D3DDE7; }
+    .grid td { padding: 10px 10px; border-left: 1px solid #E1E8EF; border-bottom: 1px solid #E6ECF2; }
     .grid td:first-child { border-left: none; }
+    .compact .grid td { padding: 6px 10px; }
+    .compact .tot td { padding: 5px 12px; }
+    .dense .grid td { padding: 4px 8px; font-size: 10.5px; }
+    .dense .grid th { padding: 6px 8px; }
+    .dense .tot td { padding: 4px 12px; }
+    .dense .stamp { height: 80px; }
+    .compact .box, .dense .box { padding: 10px 14px; height: 46px; }
+    .compact #g-titre, .dense #g-titre { margin-top: 18px !important; }
+    .compact #g-doit, .dense #g-doit { margin-top: 12px !important; }
+    .compact #g-presta, .dense #g-presta { margin-top: 18px !important; }
+    .compact #g-debours, .dense #g-debours { margin-top: 12px !important; }
+    .compact #g-tot, .dense #g-tot { margin-top: 20px !important; }
+    .compact .rule, .dense .rule { margin-top: 12px; }
 
-    .tot td { padding: 4px 10px; border-bottom: 1px solid #E6ECF2; }
+    .tot td { padding: 7px 12px; border-bottom: 1px solid #E6ECF2; }
     .tot td.lab { color: #64748B; width: 55%; }
     .tot td.val { text-align: right; color: #1E293B; }
     .tot tr.sep td { border-top: 1px solid #A9C4DC; }
     .tot tr.ret td { color: #B45309; }
-    .tot tr.net td { background: #DCE8F3; color: #2C4A68; font-weight: bold; padding: 9px 10px; border-bottom: none; border-top: 1px solid #A9C4DC; }
+    .tot tr.net td { background: #DCE8F3; color: #2C4A68; font-weight: bold; font-size: 14px; padding: 12px 12px; border-bottom: none; border-top: 1px solid #A9C4DC; }
 
-    .stamp { border: 1px dashed #A9B8C8; border-radius: 10px; height: 74px; }
+    .stamp { border: 1px dashed #A9B8C8; border-radius: 10px; height: 104px; }
     .watermark { position: fixed; top: 360px; left: 60px; font-size: 90px; color: #4F7FA8; opacity: .10;
                  transform: rotate(-30deg); letter-spacing: 6px; }
-    .footer { position: fixed; bottom: -64px; left: 0; right: 0; text-align: center; font-size: 7.5px; color: #7A889A;
+    .footer { position: fixed; bottom: -70px; left: 0; right: 0; text-align: center; font-size: 9px; color: #7A889A;
               border-top: 1px solid #D3DDE7; padding-top: 7px; line-height: 1.5; }
 </style>
 </head>
-<body>
+<body class="{{ $densite }}">
 @if ($f->duplicata)
     <div class="watermark">DUPLICATA</div>
 @endif
 
 {{-- ── En-tête du cabinet (masqué sur papier à en-tête) ─────────────── --}}
 @if ($f->sans_en_tete)
-    <div style="height: 120px;"></div>
+    <div style="height: 150px;"></div>
 @else
     <table>
         <tr>
             <td style="width: 40%; vertical-align: top;">
                 @if ($logo)
-                    <img src="{{ $logo }}" style="max-height: 80px; max-width: 190px;">
+                    <img src="{{ $logo }}" style="max-height: 105px; max-width: 250px;">
                 @else
                     <div class="logo-txt">{{ $cab['sigle'] }}</div>
                     <div class="logo-sub">{{ ucfirst(mb_strtolower($cab['activite'])) }}</div>
@@ -125,7 +142,7 @@
 @endif
 
 {{-- ── Titre, N°, date ──────────────────────────────────────────────── --}}
-<table style="margin-top: 22px;">
+<table id="g-titre" style="margin-top: 30px;">
     <tr>
         <td style="width: 62%; vertical-align: top;" class="titre">{{ $titre }}{{ $f->duplicata ? ' · DUPLICATA' : '' }}</td>
         <td style="vertical-align: top;">
@@ -138,7 +155,7 @@
 </table>
 
 {{-- ── Doit / Adresse ───────────────────────────────────────────────── --}}
-<table style="margin-top: 14px;">
+<table id="g-doit" style="margin-top: 22px;">
     <tr>
         <td class="lbl" style="width: 50%; padding: 0 6px 5px 4px;">Doit</td>
         <td class="lbl" style="padding: 0 0 5px 10px;">Adresse</td>
@@ -146,7 +163,7 @@
     <tr>
         <td style="padding-right: 6px;">
             <div class="box">
-                <div class="b" style="font-size: 12px; color: #1E293B;">{{ $doitNom }}</div>
+                <div class="b" style="font-size: 15px; color: #1E293B;">{{ $doitNom }}</div>
                 @if ($idFiscal)
                     <div class="soft" style="margin-top: 8px;">ID. Fiscal : {{ $idFiscal }}</div>
                 @elseif ($f->client_code)
@@ -161,7 +178,7 @@
 </table>
 
 @if ($f->observation || $f->exercice || $f->periode_debut)
-    <div class="soft" style="margin-top: 10px;">
+    <div class="soft" style="margin-top: 16px;">
         @if ($f->observation)<span class="b" style="color: #3F5B78;">Objet :</span> {{ $f->observation }}@endif
         @if ($f->periode_debut) &nbsp;·&nbsp; Période du {{ $f->periode_debut->format('d/m/Y') }} au {{ $f->periode_fin->format('d/m/Y') }}@endif
         @if ($f->exercice) &nbsp;·&nbsp; Exercice {{ $f->exercice }}@endif
@@ -169,15 +186,15 @@
 @endif
 
 {{-- ── Prestations (honoraires) ─────────────────────────────────────── --}}
-<table class="grid" style="margin-top: 22px;">
+<table id="g-presta" class="grid" style="margin-top: 30px;">
     <thead>
         <tr>
             <th>Prestation</th>
-            <th style="width: 82px;">P.U. H.T.</th>
-            <th style="width: 58px;">Remise</th>
-            @if ($colTva)<th style="width: 44px;">TVA</th>@endif
-            <th style="width: 44px;">QT</th>
-            <th style="width: 90px;">Mnt H.T</th>
+            <th style="width: 100px;">P.U. H.T.</th>
+            <th style="width: 70px;">Remise</th>
+            @if ($colTva)<th style="width: 52px;">TVA</th>@endif
+            <th style="width: 52px;">QT</th>
+            <th style="width: 110px;">Mnt H.T</th>
         </tr>
     </thead>
     <tbody>
@@ -198,15 +215,15 @@
 
 {{-- ── Débours (frais avancés pour le client, refacturés au coût, hors TVA) ── --}}
 @if ($lignesDebours->isNotEmpty())
-    <table class="grid" style="margin-top: 16px;">
+    <table id="g-debours" class="grid" style="margin-top: 22px;">
         <thead>
             <tr>
                 <th>Débours</th>
-                <th style="width: 82px;">P.U.</th>
-                <th style="width: 58px;"></th>
-                @if ($colTva)<th style="width: 44px;"></th>@endif
-                <th style="width: 44px;">QT</th>
-                <th style="width: 90px;">Montant</th>
+                <th style="width: 100px;">P.U.</th>
+                <th style="width: 70px;"></th>
+                @if ($colTva)<th style="width: 52px;"></th>@endif
+                <th style="width: 52px;">QT</th>
+                <th style="width: 110px;">Montant</th>
             </tr>
         </thead>
         <tbody>
@@ -225,14 +242,21 @@
 @endif
 
 {{-- ── Totaux ───────────────────────────────────────────────────────── --}}
-<table style="margin-top: 26px;">
+<table id="g-tot" style="margin-top: 36px;">
     <tr>
         <td style="width: 48%; vertical-align: top; padding-right: 16px;">
             <div class="lbl">Mode de paiement</div>
             <div style="margin-top: 3px; color: #1E293B;">{{ $f->mode_paiement ?: '—' }}</div>
 
-            <div class="lbl" style="margin-top: 22px;">Arrêtée la présente note d'honoraire / facture à la somme de</div>
-            <div class="b" style="margin-top: 4px; color: #1E293B;">{{ $enLettres }}</div>
+            <div class="lbl" style="margin-top: 30px;">Arrêtée la présente note d'honoraire / facture à la somme de</div>
+            <div class="b" style="margin-top: 6px; font-size: 12.5px; line-height: 1.4; color: #1E293B;">{{ $enLettres }}</div>
+
+            <div class="lbl" style="margin-top: 26px; margin-bottom: 6px;">Signature et cachet</div>
+            @if ($cachet)
+                <img src="{{ $cachet }}" style="max-height: 120px; max-width: 260px;">
+            @else
+                <div class="stamp"></div>
+            @endif
         </td>
         <td style="vertical-align: top;">
             <table class="tot">
@@ -249,21 +273,6 @@
                 @endif
                 <tr class="net"><td>NET Facture</td><td class="r">{{ $n($f->net_facture) }} {{ $devise }}</td></tr>
             </table>
-        </td>
-    </tr>
-</table>
-
-{{-- ── Signature et cachet ──────────────────────────────────────────── --}}
-<table style="margin-top: 26px;">
-    <tr>
-        <td style="width: 52%;"></td>
-        <td class="c">
-            <div class="lbl" style="margin-bottom: 6px;">Signature et cachet</div>
-            @if ($cachet)
-                <img src="{{ $cachet }}" style="max-height: 100px; max-width: 240px;">
-            @else
-                <div class="stamp"></div>
-            @endif
         </td>
     </tr>
 </table>
