@@ -224,7 +224,7 @@ class ReleveBancaireController extends Controller
 
         $clientId = $user->id;
 
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.key');
         if (!$apiKey) {
             return response()->json(['message' => 'Clé API Gemini non configurée.'], 500);
         }

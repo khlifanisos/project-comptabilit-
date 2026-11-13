@@ -13,6 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Behind Caddy/Nginx in Docker: trust X-Forwarded-* so Laravel sees https and the real client IP.
+        // Safe because the backend container is not reachable from outside the Docker network.
+        $middleware->trustProxies(at: '*');
         $middleware->statefulApi();
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,

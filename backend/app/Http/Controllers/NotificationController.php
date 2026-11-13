@@ -140,6 +140,8 @@ class NotificationController extends Controller
 
     private static function buildEmailHtml(string $titre, string $message, string $nom): string
     {
+        $dashboardUrl = htmlspecialchars(rtrim(config('app.frontend_url'), '/') . '/dashboard', ENT_QUOTES);
+
         return <<<HTML
 <!DOCTYPE html>
 <html lang="fr">
@@ -165,7 +167,7 @@ class NotificationController extends Controller
               Connectez-vous à votre espace pour plus de détails.
             </p>
             <div style="text-align:center;margin:24px 0">
-              <a href="http://localhost:3000/dashboard"
+              <a href="{$dashboardUrl}"
                  style="background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">
                 Accéder à mon espace
               </a>

@@ -91,7 +91,7 @@ class ClientController extends Controller
         $co        = e($admin->entreprise ?: 'Intelligence Comptabilité');
         $an        = e($admin->nom);
         $cn        = e($client->nom);
-        $loginUrl  = env('FRONTEND_URL', 'http://localhost:5173') . '/login';
+        $loginUrl  = config('app.frontend_url') . '/login';
 
         $this->sendMail(
             $client->email,
@@ -438,7 +438,7 @@ class ClientController extends Controller
             []
         );
 
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+        $frontendUrl = config('app.frontend_url');
         $link = $frontendUrl . '/register?email=' . urlencode($email);
 
         $this->sendMail($email, null,

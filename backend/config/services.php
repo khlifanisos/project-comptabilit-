@@ -35,4 +35,37 @@ return [
         ],
     ],
 
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+    ],
+
+    'brevo' => [
+        'key' => env('BREVO_API_KEY'),
+    ],
+
+    'sms' => [
+        'country_code' => env('SMS_COUNTRY_CODE', '+216'),
+    ],
+
+    'twilio' => [
+        'sid' => env('TWILIO_SID'),
+        'token' => env('TWILIO_TOKEN'),
+        'from' => env('TWILIO_FROM'),
+    ],
+
+    'infobip' => [
+        'key' => env('INFOBIP_API_KEY'),
+        'base_url' => env('INFOBIP_BASE_URL'),
+    ],
+
+    'vonage' => [
+        'key' => env('VONAGE_API_KEY'),
+        'secret' => env('VONAGE_API_SECRET'),
+        'from' => env('VONAGE_FROM', 'Comptabilite'),
+    ],
+
+    'textbelt' => [
+        'key' => env('TEXTBELT_KEY', 'textbelt'),
+    ],
+
 ];

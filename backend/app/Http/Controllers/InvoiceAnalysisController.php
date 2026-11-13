@@ -98,7 +98,7 @@ never leave this field empty and never guess a currency that is not evidenced on
 
     public static function extractData(string $storagePath): array
     {
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.key');
         if (!$apiKey || !Storage::disk('public')->exists($storagePath)) {
             return ['lignes' => [], 'resume' => [], 'devise' => 'TND'];
         }
@@ -171,7 +171,7 @@ never leave this field empty and never guess a currency that is not evidenced on
         $file   = $request->file('file');
         $mime   = $file->getMimeType();
         $base64 = base64_encode(file_get_contents($file->getRealPath()));
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.key');
 
         if (!$apiKey) {
             return response()->json(['message' => 'Clé API Gemini non configurée.'], 500);

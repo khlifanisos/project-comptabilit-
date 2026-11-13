@@ -54,6 +54,12 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Public URL of the React app (used in links inside emails)
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+
+    // Secret code required to sign up as super admin
+    'super_admin_signup_code' => env('SUPER_ADMIN_SIGNUP_CODE'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

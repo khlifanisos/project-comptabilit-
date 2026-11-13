@@ -1,0 +1,27 @@
+# Production overlay (OVH VPS). Adds Caddy in front for automatic HTTPS (Let's Encrypt).
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Needs DOMAIN and ACME_EMAIL in .env.docker, and the domain's DNS A record pointing at the server.
+
+services:
+  web:
+    # Only Caddy talks to Nginx; nothing is published on the host
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    env_file: .env.docker
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

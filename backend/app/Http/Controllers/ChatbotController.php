@@ -136,7 +136,7 @@ class ChatbotController extends Controller
 
     private function reply(string $systemPrompt, array $history, string $question)
     {
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.key');
         if (!$apiKey) {
             return response()->json(['message' => 'Assistant indisponible (clé API non configurée).'], 500);
         }

@@ -35,7 +35,7 @@ class AuthController extends Controller
             }
 
             // Normalise to international format
-            $countryCode = env('SMS_COUNTRY_CODE', '+216');
+            $countryCode = config('services.sms.country_code');
             if (str_starts_with($telephone, '00')) {
                 $telephone = '+' . substr($telephone, 2);
             } elseif (!str_starts_with($telephone, '+')) {
@@ -56,9 +56,9 @@ class AuthController extends Controller
             $message  = "Votre code de vérification Intelligence Comptabilité : {$code}";
 
             // ── 1. Twilio ────────────────────────────────────────
-            $sid   = env('TWILIO_SID');
-            $token = env('TWILIO_TOKEN');
-            $from  = env('TWILIO_FROM');
+            $sid   = config('services.twilio.sid');
+            $token = config('services.twilio.token');
+            $from  = config('services.twilio.from');
 
             if (!$smsSent && $sid && $token && $from) {
                 try {
@@ -77,8 +77,8 @@ class AuthController extends Controller
             }
 
             // ── 2. Infobip (free tier — 100 SMS/month) ──────────
-            $infobipKey  = env('INFOBIP_API_KEY');
-            $infobipBase = env('INFOBIP_BASE_URL');
+            $infobipKey  = config('services.infobip.key');
+            $infobipBase = config('services.infobip.base_url');
 
             if (!$smsSent && $infobipKey && $infobipBase) {
                 try {
@@ -103,8 +103,8 @@ class AuthController extends Controller
             }
 
             // ── 3. Vonage / Nexmo (free signup — no credit card) ─
-            $vonageKey    = env('VONAGE_API_KEY');
-            $vonageSecret = env('VONAGE_API_SECRET');
+            $vonageKey    = config('services.vonage.key');
+            $vonageSecret = config('services.vonage.secret');
 
             if (!$smsSent && $vonageKey && $vonageSecret) {
                 try {
@@ -112,7 +112,7 @@ class AuthController extends Controller
                         'api_key'    => $vonageKey,
                         'api_secret' => $vonageSecret,
                         'to'         => ltrim($telephone, '+'),
-                        'from'       => env('VONAGE_FROM', 'Comptabilite'),
+                        'from'       => config('services.vonage.from'),
                         'text'       => $message,
                     ]);
                     $status  = $res->json('messages.0.status') ?? '-1';
@@ -127,7 +127,7 @@ class AuthController extends Controller
 
             // ── 4. TextBelt (last resort — 1 free SMS/day) ───────
             if (!$smsSent) {
-                $textbeltKey = env('TEXTBELT_KEY', 'textbelt');
+                $textbeltKey = config('services.textbelt.key');
                 try {
                     $res = \Illuminate\Support\Facades\Http::post('https://textbelt.com/text', [
                         'phone'   => $telephone,
@@ -207,7 +207,7 @@ class AuthController extends Controller
         // sinon n'importe quel visiteur pourrait s'auto-promouvoir à l'inscription.
         $wantsSuperAdmin = $validated['role'] === 'admin' && ($validated['admin_type'] ?? 'admin') === 'super_admin';
         if ($wantsSuperAdmin) {
-            $expectedCode = env('SUPER_ADMIN_SIGNUP_CODE');
+            $expectedCode = config('app.super_admin_signup_code');
             if (!$expectedCode || ($validated['super_admin_code'] ?? '') !== $expectedCode) {
                 throw ValidationException::withMessages([
                     'super_admin_code' => 'Code Super Admin invalide.',
@@ -509,7 +509,7 @@ class AuthController extends Controller
     // ── Email helper: Brevo API first, SMTP fallback ───────────────────────
     private function sendVerificationEmail(string $toEmail, string $code): array
     {
-        $apiKey = env('BREVO_API_KEY');
+        $apiKey = config('services.brevo.key');
 
         // ── 1. Brevo REST API (no IP restriction) ────────────────────────
         if ($apiKey) {
@@ -520,8 +520,8 @@ class AuthController extends Controller
                     'Accept'       => 'application/json',
                 ])->post('https://api.brevo.com/v3/smtp/email', [
                     'sender'      => [
-                        'name'  => env('MAIL_FROM_NAME', 'Intelligence Comptabilité'),
-                        'email' => env('MAIL_FROM_ADDRESS', 'noreply@example.com'),
+                        'name'  => config('mail.from.name'),
+                        'email' => config('mail.from.address'),
                     ],
                     'to'          => [['email' => $toEmail]],
                     'subject'     => 'Votre code de vérification',

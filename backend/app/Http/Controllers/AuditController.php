@@ -50,7 +50,7 @@ class AuditController extends Controller
             return response()->json(Cache::get($cacheKey) + ['cached' => true]);
         }
 
-        $apiKey = env('GEMINI_API_KEY');
+        $apiKey = config('services.gemini.key');
         if (!$apiKey) {
             return response()->json(['message' => 'Analyse IA indisponible (clé API non configurée).'], 500);
         }
