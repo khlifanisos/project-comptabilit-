@@ -83,17 +83,12 @@ class ImportDocumentsFiscaux extends Command
                 $stored = 'documents_fiscaux/' . Str::random(40) . '.pdf';
                 $disk->put($stored, $body);
 
-                DocumentFiscal::create([
-                    'categorie'      => $item['categorie'],
-                    'annee'          => $item['annee'] ?? null,
-                    'sous_categorie' => isset($item['sous_categorie']) ? Str::limit($item['sous_categorie'], 147) : null,
-                    'titre'          => Str::limit($item['titre'], 197),
-                    'description'    => $item['description'] ?? null,
-                    'fichier'        => $stored,
-                    'nom_original'   => Str::limit(basename(parse_url($url, PHP_URL_PATH) ?: 'document.pdf'), 250),
-                    'taille'         => strlen($body),
-                    'source_url'     => $url,
-                ]);
+                try {
+                    $this->createRecord($item, $url, $stored, strlen($body));
+                } catch (\Throwable $e) {
+                    $disk->delete($stored); // never leave an orphan file behind
+                    throw $e;
+                }
 
                 $existing[$url] = true;
                 $imported++;
@@ -113,5 +108,20 @@ class ImportDocumentsFiscaux extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function createRecord(array $item, string $url, string $stored, int $size): void
+    {
+        DocumentFiscal::create([
+            'categorie'      => $item['categorie'],
+            'annee'          => $item['annee'] ?? null,
+            'sous_categorie' => isset($item['sous_categorie']) ? Str::limit($item['sous_categorie'], 147) : null,
+            'titre'          => Str::limit($item['titre'], 197),
+            'description'    => $item['description'] ?? null,
+            'fichier'        => $stored,
+            'nom_original'   => Str::limit(basename(parse_url($url, PHP_URL_PATH) ?: 'document.pdf'), 250),
+            'taille'         => $size,
+            'source_url'     => $url,
+        ]);
     }
 }
