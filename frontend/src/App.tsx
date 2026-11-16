@@ -41,6 +41,10 @@ import AdminMessagerie from './pages/admin/AdminMessagerie'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminTickets from './pages/admin/AdminTickets'
 
+// Shared pages (clients + admin)
+import DocumentationHome from './pages/documentation/DocumentationHome'
+import DocumentationCategorie from './pages/documentation/DocumentationCategorie'
+
 function AuditPage() {
   const { user } = useAuth()
   const realRole = sessionStorage.getItem('real_role') ?? user?.role
@@ -114,6 +118,18 @@ function ThemedApp() {
             <Route path="/profil" element={
               <ProtectedRoute>
                 <DashboardLayout><Profile /></DashboardLayout>
+              </ProtectedRoute>
+            } />
+
+            {/* Documentation fiscale — clients + admin */}
+            <Route path="/documentation" element={
+              <ProtectedRoute>
+                <DashboardLayout><DocumentationHome /></DashboardLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/documentation/:slug" element={
+              <ProtectedRoute>
+                <DashboardLayout><DocumentationCategorie /></DashboardLayout>
               </ProtectedRoute>
             } />
 

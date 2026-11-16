@@ -21,6 +21,7 @@ use App\Http\Controllers\FacturationController;
 use App\Http\Controllers\AdminDocumentController;
 use App\Http\Controllers\ParametreController;
 use App\Http\Controllers\TexteLoiController;
+use App\Http\Controllers\DocumentFiscalController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ChatbotController;
 
@@ -195,6 +196,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/textes-lois',             [TexteLoiController::class, 'store']);
     Route::get('/textes-lois/{id}/fichier', [TexteLoiController::class, 'fichier']);
     Route::delete('/textes-lois/{id}',      [TexteLoiController::class, 'destroy']);
+
+    // Documentation fiscale (lecture : tout utilisateur connecté — gestion : admin)
+    Route::get('/documents-fiscaux',              [DocumentFiscalController::class, 'index']);
+    Route::get('/documents-fiscaux/stats',        [DocumentFiscalController::class, 'stats']);
+    Route::get('/documents-fiscaux/{id}/fichier', [DocumentFiscalController::class, 'fichier'])->whereNumber('id');
+    Route::post('/documents-fiscaux',             [DocumentFiscalController::class, 'store']);
+    Route::put('/documents-fiscaux/{id}',         [DocumentFiscalController::class, 'update'])->whereNumber('id');
+    Route::delete('/documents-fiscaux/{id}',      [DocumentFiscalController::class, 'destroy'])->whereNumber('id');
 
     // Admin — document actions
     Route::post('/admin/documents/notify-rename',           [AdminDocumentController::class, 'notifyRename']);

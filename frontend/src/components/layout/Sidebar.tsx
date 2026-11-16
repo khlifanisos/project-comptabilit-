@@ -20,6 +20,7 @@ import BusinessCenterIcon from '@mui/icons-material/BusinessCenter'
 import MenuBookIcon       from '@mui/icons-material/MenuBook'
 import ForumIcon          from '@mui/icons-material/Forum'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
+import LibraryBooksIcon   from '@mui/icons-material/LibraryBooks'
 import { useAuth }          from '../../contexts/AuthContext'
 import { useProfilePhoto }  from '../../utils/useProfilePhoto'
 import { useThemeMode }     from '../../contexts/ThemeModeContext'
@@ -46,6 +47,7 @@ const clientLinks = [
   { label: 'Déclarations sociales', icon: <GroupsIcon />,         path: '/sociales' },
   { label: 'Échéancier leasing',    icon: <CalendarTodayIcon />,  path: '/leasing' },
   { label: 'Audit intelligent',     icon: <SecurityIcon />,       path: '/audit' },
+  { label: 'Documentation fiscale', icon: <LibraryBooksIcon />,   path: '/documentation' },
 ]
 
 const clientBottomLinks = [
@@ -60,6 +62,7 @@ const adminLinks = [
   { label: 'Clients',         icon: <PeopleIcon />,    path: '/admin/clients' },
   { label: 'Documents',       icon: <FolderIcon />,    path: '/admin/documents' },
   { label: 'Audit intelligent', icon: <SecurityIcon />,  path: '/audit' },
+  { label: 'Documentation fiscale', icon: <LibraryBooksIcon />, path: '/documentation' },
 ]
 
 // Tentative 4-axes admin nav — toggle USE_ADMIN_AXES below to revert to the flat adminLinks above.
@@ -97,6 +100,7 @@ const adminAxes = [
     icon: <GavelIcon />,
     items: [
       { label: 'Textes et lois', icon: <MenuBookIcon />, path: '/admin/textes-lois' },
+      { label: 'Documentation fiscale', icon: <LibraryBooksIcon />, path: '/documentation' },
     ],
   },
 ]
@@ -189,6 +193,10 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     const unsub = onNotifyRefresh(fetchUnread)
     return () => { clearInterval(interval); unsub() }
   }, [fetchUnread])
+
+  // Sections with sub-pages (e.g. /documentation/notes-communes) keep their menu entry highlighted
+  const isActivePath = (path: string) =>
+    location.pathname === path || (path === '/documentation' && location.pathname.startsWith('/documentation/'))
 
   const go = (path: string) => {
     navigate(path)
@@ -304,7 +312,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                     key={link.path}
                     link={link}
                     index={i++}
-                    active={location.pathname === link.path}
+                    active={isActivePath(link.path)}
                     onClick={() => go(link.path)}
                     badge={link.path === messagesPath ? unreadMessages : undefined}
                   />
@@ -331,7 +339,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 key={link.path}
                 link={link}
                 index={i}
-                active={location.pathname === link.path}
+                active={isActivePath(link.path)}
                 onClick={() => go(link.path)}
                 badge={link.path === messagesPath ? unreadMessages : undefined}
               />
@@ -348,7 +356,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           <NavItem
             key={link.path}
             link={link}
-            active={location.pathname === link.path}
+            active={isActivePath(link.path)}
             onClick={() => go(link.path)}
           />
         ))}
