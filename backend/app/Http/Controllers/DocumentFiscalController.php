@@ -40,13 +40,25 @@ class DocumentFiscalController extends Controller
     {
         $request->validate([
             'categorie' => ['nullable', Rule::in(DocumentFiscal::CATEGORIES)],
+            'q'         => 'nullable|string|max:100',
+            'limit'     => 'nullable|integer|min:1|max:100',
         ]);
+
+        // Search: every word must appear in the title or sub-category (accent/case-insensitive via the column collation)
+        $words = preg_split('/\s+/', trim((string) $request->q), -1, PREG_SPLIT_NO_EMPTY);
 
         $docs = DocumentFiscal::query()
             ->when($request->categorie, fn ($q, $c) => $q->where('categorie', $c))
+            ->when($words, function ($q) use ($words) {
+                foreach ($words as $w) {
+                    $like = '%' . addcslashes($w, '%_\\') . '%';
+                    $q->where(fn ($q) => $q->where('titre', 'like', $like)->orWhere('sous_categorie', 'like', $like));
+                }
+            })
             ->orderByDesc('annee')
             ->orderBy('sous_categorie')
             ->orderBy('titre')
+            ->when($request->limit, fn ($q, $l) => $q->limit($l))
             ->get();
 
         return response()->json($docs);
