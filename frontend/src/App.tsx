@@ -44,6 +44,7 @@ import AdminTickets from './pages/admin/AdminTickets'
 // Shared pages (clients + admin)
 import DocumentationHome from './pages/documentation/DocumentationHome'
 import DocumentationCategorie from './pages/documentation/DocumentationCategorie'
+import Accueil from './pages/home/Accueil'
 
 function AuditPage() {
   const { user } = useAuth()
@@ -118,6 +119,13 @@ function ThemedApp() {
             <Route path="/profil" element={
               <ProtectedRoute>
                 <DashboardLayout><Profile /></DashboardLayout>
+              </ProtectedRoute>
+            } />
+
+            {/* Home (website-style landing for logged-in users) */}
+            <Route path="/accueil" element={
+              <ProtectedRoute>
+                <DashboardLayout><Accueil /></DashboardLayout>
               </ProtectedRoute>
             } />
 

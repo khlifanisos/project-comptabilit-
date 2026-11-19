@@ -2,9 +2,10 @@
 FROM php:8.4-fpm-bookworm
 
 # PHP extensions: pdo_mysql (DB), gd (dompdf images), zip/xml (phpspreadsheet), intl, bcmath, opcache
+# poppler-utils: pdftotext, used to index the documentation fiscale PDFs for the chatbot
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions pdo_mysql gd zip intl bcmath exif opcache \
- && apt-get update && apt-get install -y --no-install-recommends unzip \
+ && apt-get update && apt-get install -y --no-install-recommends unzip poppler-utils \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer

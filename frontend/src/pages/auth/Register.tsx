@@ -155,7 +155,7 @@ export default function Register() {
         super_admin_code: role === 'admin' && adminType === 'super_admin' ? superAdminCode : undefined,
       })
       toast.success('Compte créé avec succès !')
-      navigate(role === 'admin' ? '/admin/clients' : '/releves')
+      navigate('/accueil')
     } catch (err: any) {
       if (!err.response) {
         setError('Impossible de contacter le serveur.')

@@ -185,3 +185,55 @@ mark { background: transparent; color: inherit; }
   .nav-item-in, .logo-pulse, .badge-pulse, .dot-pulse, .sidebar-glow { animation: none; }
   .nav-item-in { opacity: 1; transform: none; }
 }
+/* ── Website shell: heroes, carousel, header ─────────────────────────── */
+
+/* Slide content enters with a soft rise, staggered via animation-delay */
+@keyframes heroRise {
+  from { opacity: 0; transform: translateY(26px); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+.hero-rise { animation: heroRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Slow zoom on the active slide background */
+@keyframes kenBurns {
+  from { transform: scale(1); }
+  to   { transform: scale(1.08); }
+}
+.ken-burns { animation: kenBurns 9s ease-out both; }
+
+/* Carousel dot progress */
+@keyframes slideProgress {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Animated gradient text */
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+.gradient-text {
+  background: linear-gradient(90deg, #60A5FA, #A78BFA, #22D3EE, #60A5FA);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 8s ease-in-out infinite;
+}
+
+/* Spotlight that follows the cursor on cards (uses --mx / --my set in JS) */
+.spotlight { position: relative; isolation: isolate; }
+.spotlight::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(96,165,250,0.14), transparent 45%);
+  opacity: 0; transition: opacity .3s ease;
+}
+.spotlight:hover::before { opacity: 1; }
+
+/* Hide scrollbars on horizontal carousels */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise, .ken-burns, .gradient-text { animation: none; opacity: 1; transform: none; filter: none; }
+}

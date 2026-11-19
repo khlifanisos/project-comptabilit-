@@ -39,7 +39,7 @@ export default function Login() {
     try {
       const actualRole = await login(email, password, role)
       toast.success('Connexion réussie !')
-      navigate(actualRole === 'admin' ? '/admin/clients' : '/releves')
+      navigate('/accueil')
     } catch (err: any) {
       if (!err.response) { setGeneralError('Impossible de contacter le serveur.'); return }
       const errors = err.response?.data?.errors || {}

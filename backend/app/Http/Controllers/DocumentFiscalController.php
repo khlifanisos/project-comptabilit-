@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Administrateur;
 use App\Models\DocumentFiscal;
+use App\Services\DocumentationFiscaleSearch;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -97,8 +99,21 @@ class DocumentFiscalController extends Controller
             'taille'       => $file->getSize(),
             'admin_id'     => $request->user()->id,
         ]);
+        $this->indexForChatbot($doc);
 
         return response()->json($doc, 201);
+    }
+
+    /** Makes the document searchable by the chatbot; never blocks the upload if extraction fails. */
+    private function indexForChatbot(DocumentFiscal $doc): void
+    {
+        try {
+            if (DocumentationFiscaleSearch::available()) {
+                app(DocumentationFiscaleSearch::class)->index($doc);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Indexation documentation fiscale échouée', ['id' => $doc->id, 'error' => $e->getMessage()]);
+        }
     }
 
     public function update(Request $request, int $id)
@@ -107,6 +122,7 @@ class DocumentFiscalController extends Controller
 
         $doc = DocumentFiscal::findOrFail($id);
         $doc->update($request->validate($this->rules()));
+        $this->indexForChatbot($doc); // the title is part of the search index
 
         return response()->json($doc);
     }

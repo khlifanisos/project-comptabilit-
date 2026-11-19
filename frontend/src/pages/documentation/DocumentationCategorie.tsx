@@ -241,7 +241,7 @@ export default function DocumentationCategorie() {
         gap: 3, alignItems: 'start',
       }}>
         {/* ── Document list ── */}
-        <Box sx={{ ...card, overflow: 'hidden', position: { md: 'sticky' }, top: { md: 16 } }}>
+        <Box sx={{ ...card, overflow: 'hidden', position: { md: 'sticky' }, top: { md: 88 } }}>
           <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 1.5, height: 40, borderRadius: 2,

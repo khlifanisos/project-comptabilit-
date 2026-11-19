@@ -37,6 +37,8 @@ return [
 
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
+        // Web search for the chatbot (recent information). Off by default: billed by Google beyond its free quota.
+        'google_search' => (bool) env('GEMINI_GOOGLE_SEARCH', false),
     ],
 
     'brevo' => [

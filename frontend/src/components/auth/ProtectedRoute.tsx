@@ -12,7 +12,7 @@ export default function ProtectedRoute({ children, allowedRole }: Props) {
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (allowedRole && user?.role !== allowedRole) {
-    return <Navigate to={user?.role === 'admin' ? '/admin/clients' : '/releves'} replace />
+    return <Navigate to="/accueil" replace />
   }
   return <>{children}</>
 }

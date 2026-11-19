@@ -7,6 +7,7 @@ import LibraryBooksIcon   from '@mui/icons-material/LibraryBooks'
 import api from '../../api/axios'
 import { CATEGORIES, DocumentFiscal } from './categories'
 import DocumentSearch from './DocumentSearch'
+import PageHero from '../../components/layout/PageHero'
 
 /** Landing of the "Documentation fiscale" section: search and categories. */
 export default function DocumentationHome() {
@@ -27,58 +28,37 @@ export default function DocumentationHome() {
   const total = stats ? Object.values(stats).reduce((a, b) => a + Number(b), 0) : null
 
   return (
-    <Box className="fade-in" sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 3, md: 4 } }}>
-      {/* ── Hero ── */}
-      <Box sx={{
-        position: 'relative', overflow: 'hidden',
-        borderRadius: 4, px: { xs: 2.5, sm: 4, md: 6 }, py: { xs: 4, md: 6 },
-        color: 'white',
-        background: 'linear-gradient(135deg, #0A1628 0%, #0D47A1 55%, #1565C0 100%)',
-      }}>
-        {/* Decorative shapes */}
-        <Box aria-hidden sx={{
-          position: 'absolute', right: -80, top: -80, width: 320, height: 320, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(96,165,250,0.35) 0%, rgba(96,165,250,0) 70%)',
-        }} />
-        <LibraryBooksIcon aria-hidden sx={{
-          position: 'absolute', right: { xs: -20, md: 40 }, bottom: { xs: -20, md: -10 },
-          fontSize: { xs: 140, md: 220 }, color: 'rgba(255,255,255,0.06)', transform: 'rotate(-12deg)',
-        }} />
-
-        <Box sx={{ position: 'relative', maxWidth: 720 }}>
-          <Chip label="Bibliothèque fiscale" size="small" sx={{
-            bgcolor: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 600, mb: 2,
-            border: '1px solid rgba(255,255,255,0.18)',
-          }} />
-          <Typography component="h1" sx={{ fontSize: { xs: 26, md: 38 }, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-            Documentation fiscale
-          </Typography>
-          <Typography sx={{ mt: 1.5, mb: 3.5, fontSize: { xs: 15, md: 17 }, color: 'rgba(255,255,255,0.78)', maxWidth: 560 }}>
-            Lois de finances, notes communes, conventions et codes fiscaux, réunis au même endroit et consultables en un clic.
-          </Typography>
-
-          <DocumentSearch />
-
-          <Box sx={{ display: 'flex', gap: { xs: 3, md: 5 }, mt: 4, flexWrap: 'wrap' }}>
-            {[
-              { value: total, label: 'documents' },
-              { value: CATEGORIES.length, label: 'catégories' },
-              { value: latestYear, label: 'dernière loi de finances' },
-            ].map(s => (
-              <Box key={s.label}>
-                <Typography sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 800, lineHeight: 1 }}>
-                  {s.value ?? <Skeleton width={48} sx={{ bgcolor: 'rgba(255,255,255,0.15)' }} />}
-                </Typography>
-                <Typography sx={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', mt: 0.5 }}>{s.label}</Typography>
-              </Box>
-            ))}
-          </Box>
+    <Box>
+      <PageHero
+        size="lg"
+        icon={<LibraryBooksIcon />}
+        eyebrow="Bibliothèque fiscale"
+        crumbs={[{ label: 'Accueil', path: '/accueil' }, { label: 'Documentation fiscale' }]}
+        title={<>Documentation <Box component="span" className="gradient-text">fiscale</Box></>}
+        subtitle="Lois de finances, notes communes, conventions et codes fiscaux, réunis au même endroit et consultables en un clic."
+      >
+        <DocumentSearch />
+        <Box sx={{ display: 'flex', gap: { xs: 3, md: 6 }, mt: 4, flexWrap: 'wrap' }}>
+          {[
+            { value: total, label: 'documents' },
+            { value: CATEGORIES.length, label: 'catégories' },
+            { value: latestYear, label: 'dernière loi de finances' },
+          ].map(s => (
+            <Box key={s.label} sx={{ pl: 2, borderLeft: '2px solid rgba(96,165,250,0.5)' }}>
+              <Typography sx={{ fontSize: { xs: 24, md: 30 }, fontWeight: 800, lineHeight: 1 }}>
+                {s.value ?? <Skeleton width={48} sx={{ bgcolor: 'rgba(255,255,255,0.15)' }} />}
+              </Typography>
+              <Typography sx={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', mt: 0.5 }}>{s.label}</Typography>
+            </Box>
+          ))}
         </Box>
-      </Box>
+      </PageHero>
 
+    <Box className="fade-in" sx={{ maxWidth: 1320, mx: 'auto', px: { xs: 1.5, sm: 2, md: 3 }, pt: { xs: 1, md: 2 }, pb: 2 }}>
       {/* ── Categories (bento grid) ── */}
       <Box>
-        <Typography component="h2" fontWeight={700} fontSize={18} mb={2}>Parcourir par type de document</Typography>
+        <Typography component="h2" fontWeight={800} fontSize={{ xs: 22, md: 28 }} letterSpacing="-0.02em" mb={0.5}>Parcourir par type de document</Typography>
+        <Typography color="text.secondary" mb={3}>Choisissez une catégorie pour consulter et télécharger les textes.</Typography>
         <Box sx={{
           display: 'grid', gap: 2,
           gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
@@ -134,6 +114,7 @@ export default function DocumentationHome() {
           })}
         </Box>
       </Box>
+    </Box>
     </Box>
   )
 }

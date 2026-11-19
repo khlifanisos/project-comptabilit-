@@ -26,10 +26,10 @@ export default function WhatsAppButton() {
           position: 'fixed',
           bottom: { xs: 84, md: 92 },
           right:  { xs: 16, md: 24 },
-          zIndex: 200,
+          zIndex: 1200,
           bgcolor: '#25D366',
           color: 'white',
-          boxShadow: '0 8px 24px rgba(37,211,102,0.5)',
+          boxShadow: '0 12px 28px rgba(37,211,102,0.45)',
           '&:hover': { bgcolor: '#1EBE5A', transform: 'scale(1.08)' },
           transition: 'transform 0.2s',
         }}>
