@@ -20,15 +20,12 @@ class MessageController extends Controller
             return response()->json(['message' => 'Client introuvable.'], 404);
         }
 
-        if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
-            if ($adminEntreprise !== '' && trim(strtolower($client->entreprise ?? '')) !== $adminEntreprise) {
-                return response()->json(['message' => 'Accès refusé.'], 403);
-            }
-        } else {
-            if ($user->id !== $client->id) {
-                return response()->json(['message' => 'Accès refusé.'], 403);
-            }
+        $allowed = $user instanceof Administrateur
+            ? $user->canAccessClient($client)
+            : $user->id === $client->id;
+
+        if (!$allowed) {
+            return response()->json(['message' => 'Accès refusé.'], 403);
         }
 
         return $client;
@@ -69,12 +66,7 @@ class MessageController extends Controller
             return response()->json(['message' => 'Accès refusé.'], 403);
         }
 
-        $adminEntreprise = trim(strtolower($admin->entreprise ?? ''));
-        $query = Client::where('is_approved', true);
-        if ($adminEntreprise !== '') {
-            $query->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]);
-        }
-        $clients = $query->get();
+        $clients = Client::where('is_approved', true)->visibleTo($admin)->get();
 
         $rows = $clients->map(function (Client $client) {
             $last = Message::where('client_id', $client->id)->latest()->first();
@@ -176,7 +168,7 @@ class MessageController extends Controller
             }
 
             $attachment = [
-                'attachment_path' => $file->store("messages/{$clientId}", 'public'),
+                'attachment_path' => $file->store("messages/{$clientId}", 'local'),
                 'attachment_type' => $type,
                 'attachment_name' => $file->getClientOriginalName(),
                 'attachment_mime' => $mime,
@@ -236,11 +228,11 @@ class MessageController extends Controller
         if ($client instanceof \Illuminate\Http\JsonResponse) return $client;
 
         $message = Message::where('client_id', $clientId)->findOrFail($messageId);
-        if (!$message->attachment_path || !Storage::disk('public')->exists($message->attachment_path)) {
+        if (!$message->attachment_path || !Storage::disk('local')->exists($message->attachment_path)) {
             abort(404, 'Pièce jointe non disponible.');
         }
 
-        $path = Storage::disk('public')->path($message->attachment_path);
+        $path = Storage::disk('local')->path($message->attachment_path);
 
         return response()->file($path, [
             'Content-Type'  => $message->attachment_mime ?: 'application/octet-stream',
@@ -254,10 +246,7 @@ class MessageController extends Controller
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
-            $clientIds = Client::when($adminEntreprise !== '', fn ($q) =>
-                $q->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise])
-            )->pluck('id');
+            $clientIds = Client::visibleTo($user)->pluck('id');
 
             $count = Message::whereIn('client_id', $clientIds)
                 ->where('sender_type', 'client')

@@ -38,7 +38,7 @@ class TexteLoiController extends Controller
         ]);
 
         $file = $request->file('fichier');
-        $path = $file->store('textes_lois', 'public');
+        $path = $file->store('textes_lois', 'local');
 
         $texte = TexteLoi::create([
             'titre'       => $validated['titre'],
@@ -57,8 +57,8 @@ class TexteLoiController extends Controller
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
 
         $texte = TexteLoi::findOrFail($id);
-        if ($texte->fichier && Storage::disk('public')->exists($texte->fichier)) {
-            Storage::disk('public')->delete($texte->fichier);
+        if ($texte->fichier && Storage::disk('local')->exists($texte->fichier)) {
+            Storage::disk('local')->delete($texte->fichier);
         }
         $texte->delete();
 
@@ -71,11 +71,11 @@ class TexteLoiController extends Controller
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
 
         $texte = TexteLoi::findOrFail($id);
-        if (!$texte->fichier || !Storage::disk('public')->exists($texte->fichier)) {
+        if (!$texte->fichier || !Storage::disk('local')->exists($texte->fichier)) {
             abort(404, 'Fichier non disponible.');
         }
 
-        $path = Storage::disk('public')->path($texte->fichier);
+        $path = Storage::disk('local')->path($texte->fichier);
 
         return response()->file($path, [
             'Content-Type'  => 'application/pdf',

@@ -108,9 +108,15 @@ class AuditBalanceController extends Controller
     private function resolveClientId(Request $request): ?int
     {
         $user = $request->user();
-        return $user instanceof Administrateur
-            ? (int) $request->input('client_id')
-            : $user->id;
+        if (!($user instanceof Administrateur)) {
+            return $user->id;
+        }
+
+        $clientId = (int) $request->input('client_id');
+        if ($clientId && !$user->canAccessClient($clientId)) {
+            abort(403, 'Accès non autorisé.');
+        }
+        return $clientId ?: null;
     }
 
     private function assertType(string $type): void
@@ -184,7 +190,7 @@ class AuditBalanceController extends Controller
             ], 422);
         }
 
-        $path = $file->store("audit_balances/{$clientId}/{$type}", 'public');
+        $path = $file->store("audit_balances/{$clientId}/{$type}", 'local');
         $previous = AuditBalanceImport::where('client_id', $clientId)->where('type', $type)->value('fichier');
 
         // Rows are streamed from the file straight into the table in batches, so a
@@ -232,7 +238,7 @@ class AuditBalanceController extends Controller
                 return [$import, $count];
             });
         } catch (\Throwable $e) {
-            Storage::disk('public')->delete($path);
+            Storage::disk('local')->delete($path);
             return response()->json([
                 'message' => $e->getMessage() === 'EMPTY'
                     ? "Aucune ligne exploitable dans ce fichier. Vérifiez les en-têtes : {$need}."
@@ -241,7 +247,7 @@ class AuditBalanceController extends Controller
         }
 
         if ($previous && $previous !== $path) {
-            Storage::disk('public')->delete($previous);
+            Storage::disk('local')->delete($previous);
         }
 
         return response()->json([
@@ -263,7 +269,7 @@ class AuditBalanceController extends Controller
 
         $import = AuditBalanceImport::where('client_id', $clientId)->where('type', $type)->first();
         if ($import) {
-            Storage::disk('public')->delete($import->fichier);
+            Storage::disk('local')->delete($import->fichier);
             $import->delete(); // cascades to lignes
         }
 

@@ -12,6 +12,26 @@ class Client extends Authenticatable
 
     protected $table = 'clients';
 
+    /**
+     * Clients an admin may see or act on — the single source of truth for
+     * multi-cabinet isolation. A super admin sees every cabinet; a regular
+     * admin only the clients of their own entreprise; an admin with no
+     * entreprise sees nobody (never "everybody").
+     */
+    public function scopeVisibleTo(\Illuminate\Database\Eloquent\Builder $query, Administrateur $admin): \Illuminate\Database\Eloquent\Builder
+    {
+        if ($admin->is_super_admin) {
+            return $query;
+        }
+
+        $entreprise = $admin->normalizedEntreprise();
+        if ($entreprise === '') {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereRaw('LOWER(TRIM(entreprise)) = ?', [$entreprise]);
+    }
+
     protected $fillable = [
         'nom', 'email', 'mot_de_passe', 'entreprise', 'raison_sociale', 'matricule_fiscale', 'gerant', 'contact',
         'telephone', 'adresse', 'avatar', 'is_actif', 'is_approved',

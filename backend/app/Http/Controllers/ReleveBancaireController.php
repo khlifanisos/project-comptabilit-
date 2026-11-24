@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesClientAccess;
 use App\Models\ReleveBancaire;
 use App\Models\Administrateur;
 use Illuminate\Http\Request;
@@ -14,16 +15,15 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class ReleveBancaireController extends Controller
 {
+    use AuthorizesClientAccess;
+
     public function index(Request $request)
     {
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
             $query = ReleveBancaire::with('client')->latest('date');
-            if ($adminEntreprise !== '') {
-                $query->whereHas('client', fn($q) => $q->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]));
-            }
+            $this->scopeToUser($query, $user);
             $data = $query->paginate(100);
         } else {
             $data = ReleveBancaire::where('client_id', $user->id)->latest('date')->paginate(100);
@@ -47,8 +47,12 @@ class ReleveBancaireController extends Controller
 
         $user     = $request->user();
         $clientId = $user instanceof Administrateur
-            ? $request->input('client_id')
+            ? (int) $request->input('client_id', 0)
             : $user->id;
+
+        if ($clientId) {
+            $this->authorizeAccess($request, $clientId);
+        }
 
         if (!$clientId) {
             return response()->json([
@@ -91,7 +95,7 @@ class ReleveBancaireController extends Controller
     {
         $user  = $request->user();
         $rows  = $user instanceof Administrateur
-            ? ReleveBancaire::with('client')->get()
+            ? $this->scopeToUser(ReleveBancaire::with('client'), $user)->get()
             : ReleveBancaire::where('client_id', $user->id)->get();
 
         $csv = "Date;Libellé;Débit;Crédit;Solde;Rapproché\n";
@@ -111,7 +115,7 @@ class ReleveBancaireController extends Controller
         try {
             $user = $request->user();
             $rows = $user instanceof Administrateur
-                ? ReleveBancaire::with('client')->latest('date')->get()
+                ? $this->scopeToUser(ReleveBancaire::with('client')->latest('date'), $user)->get()
                 : ReleveBancaire::where('client_id', $user->id)->latest('date')->get();
 
             $blueDark  = '2D5EA8';
@@ -344,11 +348,4 @@ Rules:
         return $dateOnly;
     }
 
-    private function authorizeAccess(Request $request, int $clientId): void
-    {
-        $user = $request->user();
-        if (!($user instanceof Administrateur) && $user->id !== $clientId) {
-            abort(403, 'Accès non autorisé.');
-        }
-    }
 }

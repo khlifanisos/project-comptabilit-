@@ -26,12 +26,14 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ChatbotController;
 
 // ── Public auth routes ──────────────────────────────────────
+// Rate-limited per IP: blocks password guessing, 6-digit code brute force
+// and using the platform to spam emails/SMS.
 Route::prefix('auth')->group(function () {
-    Route::post('/send-verification', [AuthController::class, 'sendVerificationCode']);
-    Route::post('/register',          [AuthController::class, 'register']);
-    Route::post('/login',             [AuthController::class, 'login']);
-    Route::post('/forgot-password',   [AuthController::class, 'forgotPassword']);
-    Route::post('/reset-password',    [AuthController::class, 'resetPassword']);
+    Route::post('/login',             [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/register',          [AuthController::class, 'register'])->middleware('throttle:10,1');
+    Route::post('/reset-password',    [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
+    Route::post('/send-verification', [AuthController::class, 'sendVerificationCode'])->middleware('throttle:3,1');
+    Route::post('/forgot-password',   [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
 });
 
 // Public app settings (currency, WhatsApp support number) — no sensitive data

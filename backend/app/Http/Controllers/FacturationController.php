@@ -55,12 +55,7 @@ class FacturationController extends Controller
     /** Same scope as the Clients page: an admin only sees their company's clients. */
     private function visibleClients(Administrateur $admin): Builder
     {
-        $query = Client::where('is_approved', true);
-        $entreprise = trim(strtolower($admin->entreprise ?? ''));
-        if (!$admin->is_super_admin && $entreprise !== '') {
-            $query->whereRaw('LOWER(TRIM(entreprise)) = ?', [$entreprise]);
-        }
-        return $query;
+        return Client::where('is_approved', true)->visibleTo($admin);
     }
 
     // ── Liste des factures ────────────────────────────────────────────────

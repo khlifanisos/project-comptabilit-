@@ -40,9 +40,8 @@ class AuditController extends Controller
         if (!$clientId) {
             return response()->json(['message' => 'client_id requis.'], 422);
         }
-        if ($user instanceof Administrateur) {
-            $client = Client::find($clientId);
-            if (!$client) return response()->json(['message' => 'Client introuvable.'], 404);
+        if ($user instanceof Administrateur && !$user->canAccessClient($clientId)) {
+            return response()->json(['message' => 'Client introuvable.'], 404);
         }
 
         $cacheKey = "audit_ai_summary_{$clientId}";
@@ -132,12 +131,7 @@ class AuditController extends Controller
         $isAdmin = $user instanceof Administrateur;
 
         if ($isAdmin) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
-            $clientQuery = Client::query();
-            if ($adminEntreprise !== '') {
-                $clientQuery->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]);
-            }
-            $clients = $clientQuery->get();
+            $clients = Client::visibleTo($user)->get();
             $audits  = $clients->map(function ($client) {
                 $audit           = $this->computeAudit($client->id);
                 $audit['client'] = [

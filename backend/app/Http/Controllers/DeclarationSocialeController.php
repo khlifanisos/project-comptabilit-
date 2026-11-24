@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesClientAccess;
 use App\Models\DeclarationSociale;
 use App\Models\Administrateur;
 use App\Models\Client;
@@ -16,17 +17,16 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class DeclarationSocialeController extends Controller
 {
+    use AuthorizesClientAccess;
+
     // ── List ─────────────────────────────────────────────────────────
     public function index(Request $request)
     {
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
             $query = DeclarationSociale::with('client')->latest();
-            if ($adminEntreprise !== '') {
-                $query->whereHas('client', fn($q) => $q->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]));
-            }
+            $this->scopeToUser($query, $user);
             $data = $query->paginate(100);
         } else {
             $data = DeclarationSociale::where('client_id', $user->id)->latest()->paginate(100);
@@ -75,10 +75,11 @@ class DeclarationSocialeController extends Controller
                 'errors'  => ['client_email' => ['Aucun client trouvé avec cet email dans le système.']],
             ], 422);
         }
+        $this->authorizeAccess($request, $client->id);
 
         $fichierPath = null;
         if ($request->hasFile('fichier')) {
-            $fichierPath = $request->file('fichier')->store("declarations_sociales/{$client->id}", 'public');
+            $fichierPath = $request->file('fichier')->store("declarations_sociales/{$client->id}", 'local');
         }
 
         $montant = $validated['part_patronale'] + $validated['part_salariale'];
@@ -152,7 +153,7 @@ class DeclarationSocialeController extends Controller
         $decl = DeclarationSociale::findOrFail($id);
 
         if ($decl->fichier) {
-            Storage::disk('public')->delete($decl->fichier);
+            Storage::disk('local')->delete($decl->fichier);
         }
 
         $decl->delete();
@@ -215,11 +216,11 @@ class DeclarationSocialeController extends Controller
         $decl = DeclarationSociale::findOrFail($id);
         $this->authorizeAccess($request, $decl->client_id);
 
-        if (!$decl->fichier || !Storage::disk('public')->exists($decl->fichier)) {
+        if (!$decl->fichier || !Storage::disk('local')->exists($decl->fichier)) {
             abort(404, 'Pièce jointe non disponible.');
         }
 
-        $path = Storage::disk('public')->path($decl->fichier);
+        $path = Storage::disk('local')->path($decl->fichier);
         $mime = mime_content_type($path) ?: 'application/octet-stream';
 
         return response()->file($path, [
@@ -290,7 +291,7 @@ class DeclarationSocialeController extends Controller
     {
         $user = $request->user();
         $rows = $user instanceof Administrateur
-            ? DeclarationSociale::with('client')->get()
+            ? $this->scopeToUser(DeclarationSociale::with('client'), $user)->get()
             : DeclarationSociale::where('client_id', $user->id)->get();
 
         $csv = "Type;Période;Date limite;Part patronale;Part salariale;Total;Statut\n";
@@ -309,7 +310,7 @@ class DeclarationSocialeController extends Controller
         try {
             $user  = $request->user();
             $query = $user instanceof Administrateur
-                ? DeclarationSociale::with('client')
+                ? $this->scopeToUser(DeclarationSociale::with('client'), $user)
                 : DeclarationSociale::where('client_id', $user->id);
 
             $ids = $request->query('ids');
@@ -566,13 +567,5 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #1A2
 </body>
 </html>
 <?php return ob_get_clean();
-    }
-
-    private function authorizeAccess(Request $request, int $clientId): void
-    {
-        $user = $request->user();
-        if (!($user instanceof Administrateur) && $user->id !== $clientId) {
-            abort(403, 'Accès non autorisé.');
-        }
     }
 }

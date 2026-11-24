@@ -35,6 +35,31 @@ class Administrateur extends Authenticatable
         return $this->hasMany(Ticket::class, 'created_by');
     }
 
+    public function normalizedEntreprise(): string
+    {
+        return trim(mb_strtolower($this->entreprise ?? ''));
+    }
+
+    /** See Client::scopeVisibleTo() for the rule. */
+    public function canAccessClient(Client|int|null $client): bool
+    {
+        if ($client === null) {
+            return false;
+        }
+        if ($this->is_super_admin) {
+            return $client instanceof Client || Client::whereKey($client)->exists();
+        }
+
+        $entreprise = $this->normalizedEntreprise();
+        if ($entreprise === '') {
+            return false;
+        }
+
+        $client = $client instanceof Client ? $client : Client::find($client);
+
+        return $client !== null && trim(mb_strtolower($client->entreprise ?? '')) === $entreprise;
+    }
+
     public function getAuthPassword(): string
     {
         return $this->mot_de_passe;

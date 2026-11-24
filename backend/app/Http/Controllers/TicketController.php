@@ -29,7 +29,7 @@ class TicketController extends Controller
     {
         foreach ((array) $request->file('fichiers', []) as $file) {
             if (!$file) continue;
-            $path = $file->store("ticket_attachments/{$ticket->id}", 'public');
+            $path = $file->store("ticket_attachments/{$ticket->id}", 'local');
             TicketAttachment::create([
                 'ticket_id'    => $ticket->id,
                 'uploaded_by'  => $admin->id,
@@ -167,11 +167,11 @@ class TicketController extends Controller
         if (!$this->canAccess($admin, $ticket)) {
             return response()->json(['message' => 'Accès non autorisé.'], 403);
         }
-        if (!Storage::disk('public')->exists($attachment->fichier)) {
+        if (!Storage::disk('local')->exists($attachment->fichier)) {
             return response()->json(['message' => 'Fichier introuvable.'], 404);
         }
 
-        return Storage::disk('public')->response($attachment->fichier, $attachment->nom_original);
+        return Storage::disk('local')->response($attachment->fichier, $attachment->nom_original);
     }
 
     public function deleteAttachment(Request $request, int $id, int $attachmentId)
@@ -184,7 +184,7 @@ class TicketController extends Controller
             return response()->json(['message' => 'Accès non autorisé.'], 403);
         }
 
-        Storage::disk('public')->delete($attachment->fichier);
+        Storage::disk('local')->delete($attachment->fichier);
         $attachment->delete();
 
         return response()->json(['message' => 'Pièce jointe supprimée.']);

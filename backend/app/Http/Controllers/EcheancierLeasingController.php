@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesClientAccess;
 use App\Models\EcheancierLeasing;
 use App\Models\Administrateur;
 use Illuminate\Http\Request;
@@ -15,15 +16,14 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class EcheancierLeasingController extends Controller
 {
+    use AuthorizesClientAccess;
+
     public function index(Request $request)
     {
         $user = $request->user();
         if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
             $query = EcheancierLeasing::with('client')->latest();
-            if ($adminEntreprise !== '') {
-                $query->whereHas('client', fn($q) => $q->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]));
-            }
+            $this->scopeToUser($query, $user);
             $data = $query->paginate(100);
         } else {
             $data = EcheancierLeasing::where('client_id', $user->id)->latest()->paginate(100);
@@ -62,10 +62,11 @@ class EcheancierLeasingController extends Controller
         $clientId = $user instanceof Administrateur
             ? (int) $validated['client_id']
             : $user->id;
+        $this->authorizeAccess($request, $clientId);
 
         $fichierPath = null;
         if ($request->hasFile('fichier')) {
-            $fichierPath = $request->file('fichier')->store('leasing', 'public');
+            $fichierPath = $request->file('fichier')->store('leasing', 'local');
         }
 
         $count = EcheancierLeasing::where('client_id', $clientId)->count();
@@ -119,8 +120,8 @@ class EcheancierLeasingController extends Controller
         ]);
 
         if ($request->hasFile('fichier')) {
-            if ($leasing->fichier) Storage::disk('public')->delete($leasing->fichier);
-            $validated['fichier'] = $request->file('fichier')->store('leasing', 'public');
+            if ($leasing->fichier) Storage::disk('local')->delete($leasing->fichier);
+            $validated['fichier'] = $request->file('fichier')->store('leasing', 'local');
         }
 
         $leasing->update($validated);
@@ -141,7 +142,7 @@ class EcheancierLeasingController extends Controller
         $this->authorizeAccess($request, $leasing->client_id);
         $ref      = $leasing->contrat_ref;
         $clientId = $leasing->client_id;
-        if ($leasing->fichier) Storage::disk('public')->delete($leasing->fichier);
+        if ($leasing->fichier) Storage::disk('local')->delete($leasing->fichier);
         $leasing->delete();
 
         NotificationController::sendAndNotify(
@@ -158,7 +159,7 @@ class EcheancierLeasingController extends Controller
     {
         $user = $request->user();
         $rows = $user instanceof Administrateur
-            ? EcheancierLeasing::with('client')->get()
+            ? $this->scopeToUser(EcheancierLeasing::with('client'), $user)->get()
             : EcheancierLeasing::where('client_id', $user->id)->get();
 
         $csv = "Réf.;Bien;Bailleur;Début;Fin;Mensualité;Option achat;Prochaine échéance;Statut\n";
@@ -177,7 +178,7 @@ class EcheancierLeasingController extends Controller
         try {
             $user = $request->user();
             $rows = $user instanceof Administrateur
-                ? EcheancierLeasing::with('client')->latest()->get()
+                ? $this->scopeToUser(EcheancierLeasing::with('client')->latest(), $user)->get()
                 : EcheancierLeasing::where('client_id', $user->id)->latest()->get();
 
             $blueDark  = '2D5EA8';
@@ -489,13 +490,5 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #1A2
 </body>
 </html>
 <?php return ob_get_clean();
-    }
-
-    private function authorizeAccess(Request $request, int $clientId): void
-    {
-        $user = $request->user();
-        if (!($user instanceof Administrateur) && $user->id !== $clientId) {
-            abort(403, 'Accès non autorisé.');
-        }
     }
 }

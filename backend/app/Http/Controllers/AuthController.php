@@ -7,8 +7,10 @@ use App\Models\Administrateur;
 use App\Models\Client;
 use App\Models\Notification;
 use App\Models\VerificationCode;
+use App\Support\AvatarStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -42,14 +44,7 @@ class AuthController extends Controller
                 $telephone = $countryCode . ltrim($telephone, '0');
             }
 
-            $code = (string) rand(100000, 999999);
-
-            VerificationCode::where('email', $request->email)->delete();
-            VerificationCode::create([
-                'email'      => $request->email,
-                'code'       => $code,
-                'expires_at' => now()->addMinutes(10),
-            ]);
+            $code = VerificationCode::issue($request->email, VerificationCode::PURPOSE_REGISTER);
 
             $smsSent  = false;
             $smsError = null;
@@ -141,11 +136,15 @@ class AuthController extends Controller
                 }
             }
 
+            if (!$smsSent) {
+                Log::warning('Verification SMS not sent: ' . $smsError);
+            }
+
             return response()->json([
-                'message'   => $smsSent ? "Code SMS envoyé au {$telephone}" : 'Code généré (SMS non envoyé).',
-                'code'      => $smsSent ? null : $code,
+                'message'   => $smsSent ? "Code SMS envoyé au {$telephone}" : 'Le SMS n\'a pas pu être envoyé. Réessayez plus tard.',
+                'code'      => $smsSent ? null : $this->devOnlyCode($code),
                 'sms_sent'  => $smsSent,
-                'sms_error' => $smsError,
+                'sms_error' => config('app.debug') ? $smsError : null,
             ]);
         }
 
@@ -166,24 +165,25 @@ class AuthController extends Controller
             // DNS check échoué — on continue quand même
         }
 
-        $code = (string) rand(100000, 999999);
-
-        VerificationCode::where('email', $request->email)->delete();
-
-        VerificationCode::create([
-            'email'      => $request->email,
-            'code'       => $code,
-            'expires_at' => now()->addMinutes(10),
-        ]);
+        $code = VerificationCode::issue($request->email, VerificationCode::PURPOSE_REGISTER);
 
         [$emailSent, $emailError] = $this->sendVerificationEmail($request->email, $code);
 
         return response()->json([
-            'message'    => $emailSent ? "Code envoyé sur {$request->email}" : 'Code généré (email non envoyé).',
-            'code'       => $emailSent ? null : $code,
+            'message'    => $emailSent ? "Code envoyé sur {$request->email}" : 'L\'email n\'a pas pu être envoyé. Réessayez plus tard.',
+            'code'       => $emailSent ? null : $this->devOnlyCode($code),
             'email_sent' => $emailSent,
-            'smtp_error' => $emailSent ? null : $emailError,
+            'smtp_error' => !$emailSent && config('app.debug') ? $emailError : null,
         ]);
+    }
+
+    /**
+     * The code is only echoed back when the mailer fails on a local debug
+     * install — anywhere else it would let anyone verify any address.
+     */
+    private function devOnlyCode(string $code): ?string
+    {
+        return app()->environment('local') && config('app.debug') ? $code : null;
     }
 
     public function register(Request $request)
@@ -193,7 +193,8 @@ class AuthController extends Controller
             'email'                 => 'required|email|max:150',
             'password'              => 'required|string|min:8|confirmed',
             'role'                  => 'required|in:admin,client',
-            'entreprise'            => 'nullable|string|max:150',
+            // An admin's entreprise is their cabinet — it decides which clients they see.
+            'entreprise'            => 'required_if:role,admin|nullable|string|max:150',
             'telephone'             => 'nullable|string|max:20',
             'adresse'               => 'nullable|string|max:500',
             'code'                  => 'required|digits:6',
@@ -216,31 +217,16 @@ class AuthController extends Controller
         }
 
         // Vérifier le code OTP
-        $record = VerificationCode::where('email', $validated['email'])
-            ->where('code', $validated['code'])
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (!$record) {
+        if (!VerificationCode::consume($validated['email'], VerificationCode::PURPOSE_REGISTER, $validated['code'])) {
             throw ValidationException::withMessages([
                 'code' => 'Code de vérification invalide ou expiré.',
             ]);
         }
 
-        $record->delete();
-
-        // Save avatar if provided
-        $avatarUrl = null;
-        if (!empty($validated['avatar'])) {
-            $base64 = $validated['avatar'];
-            $data   = str_contains($base64, ',') ? explode(',', $base64)[1] : $base64;
-            $dir    = public_path('uploads/avatars');
-            if (!is_dir($dir)) mkdir($dir, 0755, true);
-            $role     = $validated['role'];
-            $tempName = $role . '_new_' . time() . '.jpg';
-            file_put_contents($dir . '/' . $tempName, base64_decode($data));
-            $avatarUrl = config('app.url') . '/uploads/avatars/' . $tempName;
-        }
+        // Save avatar if provided (validated as a real image)
+        $avatarUrl = !empty($validated['avatar'])
+            ? AvatarStorage::store($validated['avatar'], $validated['role'] . '_new_' . Str::random(16))
+            : null;
 
         if ($validated['role'] === 'admin') {
             if (Administrateur::where('email', $validated['email'])->exists()) {
@@ -248,6 +234,7 @@ class AuthController extends Controller
             }
             $user = Administrateur::create([
                 'nom'          => $validated['nom'],
+                'entreprise'   => trim($validated['entreprise']),
                 'email'        => $validated['email'],
                 'mot_de_passe' => Hash::make($validated['password']),
                 'avatar'       => $avatarUrl,
@@ -257,9 +244,7 @@ class AuthController extends Controller
             }
             // Rename avatar file with real ID
             if ($avatarUrl) {
-                $newName = 'admin_' . $user->id . '.jpg';
-                @rename(public_path('uploads/avatars/' . basename($avatarUrl)), public_path('uploads/avatars/' . $newName));
-                $user->update(['avatar' => config('app.url') . '/uploads/avatars/' . $newName]);
+                $user->update(['avatar' => AvatarStorage::rename($avatarUrl, 'admin_' . $user->id)]);
             }
             $token = $user->createToken('auth-token')->plainTextToken;
 
@@ -290,9 +275,7 @@ class AuthController extends Controller
         ]);
         // Rename avatar file with real ID
         if ($avatarUrl) {
-            $newName = 'client_' . $user->id . '.jpg';
-            @rename(public_path('uploads/avatars/' . basename($avatarUrl)), public_path('uploads/avatars/' . $newName));
-            $user->update(['avatar' => config('app.url') . '/uploads/avatars/' . $newName]);
+            $user->update(['avatar' => AvatarStorage::rename($avatarUrl, 'client_' . $user->id)]);
         }
 
         $token = $user->createToken('auth-token')->plainTextToken;
@@ -338,7 +321,7 @@ class AuthController extends Controller
                                  );
                         });
                     } catch (\Exception $e) {
-                        \Log::error('Welcome invite mail error: ' . $e->getMessage());
+                        Log::error('Welcome invite mail error: ' . $e->getMessage());
                     }
                 }
                 $inv->delete();
@@ -415,27 +398,18 @@ class AuthController extends Controller
             $exists = Client::where('email', $request->email)->exists();
         }
 
-        if (!$exists) {
-            throw ValidationException::withMessages([
-                'email' => 'Aucun compte ' . $request->role . ' trouvé avec cette adresse email.',
-            ]);
+        // Same answer whether or not the account exists, so this endpoint
+        // can't be used to find out who has an account.
+        $emailSent = true;
+        if ($exists) {
+            $code = VerificationCode::issue($request->email, VerificationCode::PURPOSE_RESET);
+            [$emailSent] = $this->sendVerificationEmail($request->email, $code);
         }
-
-        $code = (string) rand(100000, 999999);
-
-        VerificationCode::where('email', $request->email)->delete();
-        VerificationCode::create([
-            'email'      => $request->email,
-            'code'       => $code,
-            'expires_at' => now()->addMinutes(10),
-        ]);
-
-        [$emailSent] = $this->sendVerificationEmail($request->email, $code);
 
         return response()->json([
             'message'    => $emailSent
-                ? 'Code de réinitialisation envoyé par email.'
-                : 'Email non envoyé (vérifiez la configuration SMTP).',
+                ? 'Si un compte existe pour cette adresse, un code de réinitialisation vient d\'y être envoyé.'
+                : 'L\'email n\'a pas pu être envoyé. Réessayez plus tard.',
             'email_sent' => $emailSent,
         ]);
     }
@@ -449,25 +423,18 @@ class AuthController extends Controller
             'password'              => 'required|string|min:8|confirmed',
         ]);
 
-        $record = VerificationCode::where('email', $request->email)
-            ->where('code', $request->code)
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (!$record) {
+        if (!VerificationCode::consume($request->email, VerificationCode::PURPOSE_RESET, $request->code)) {
             throw ValidationException::withMessages([
                 'code' => 'Code invalide ou expiré.',
             ]);
         }
 
-        $record->delete();
-
-        if ($request->role === 'admin') {
-            Administrateur::where('email', $request->email)
-                ->update(['mot_de_passe' => Hash::make($request->password)]);
-        } else {
-            Client::where('email', $request->email)
-                ->update(['mot_de_passe' => Hash::make($request->password)]);
+        $model   = $request->role === 'admin' ? Administrateur::class : Client::class;
+        $account = $model::where('email', $request->email)->first();
+        if ($account) {
+            $account->update(['mot_de_passe' => Hash::make($request->password)]);
+            // A password reset must log out every existing session.
+            $account->tokens()->delete();
         }
 
         // Notification à l'utilisateur
@@ -543,7 +510,7 @@ class AuthController extends Controller
             } catch (\Exception $e) {
                 $err = $e->getMessage();
             }
-            \Log::warning('Brevo API failed: ' . ($err ?? 'unknown'));
+            Log::warning('Brevo API failed: ' . ($err ?? 'unknown'));
         }
 
         // ── 2. SMTP fallback ─────────────────────────────────────────────
@@ -551,7 +518,7 @@ class AuthController extends Controller
             Mail::to($toEmail)->send(new VerificationCodeMail($code));
             return [true, null];
         } catch (\Exception $e) {
-            \Log::error('SMTP mail error: ' . $e->getMessage());
+            Log::error('SMTP mail error: ' . $e->getMessage());
             return [false, $e->getMessage()];
         }
     }

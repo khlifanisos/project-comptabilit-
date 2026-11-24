@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesClientAccess;
 use App\Models\FactureVente;
 use App\Models\Administrateur;
 use Illuminate\Http\Request;
@@ -14,16 +15,15 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class FactureVenteController extends Controller
 {
+    use AuthorizesClientAccess;
+
     public function index(Request $request)
     {
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
             $query = FactureVente::with('client')->latest();
-            if ($adminEntreprise !== '') {
-                $query->whereHas('client', fn($q) => $q->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]));
-            }
+            $this->scopeToUser($query, $user);
             $data = $query->paginate(50);
         } else {
             $data = FactureVente::where('client_id', $user->id)->latest()->paginate(50);
@@ -50,13 +50,7 @@ class FactureVenteController extends Controller
             abort(401, 'Unauthenticated.');
         }
 
-        $clientId = $user instanceof Administrateur
-            ? ($request->input('client_id') ?: $user->id)
-            : $user->id;
-
-        if (!$clientId) {
-            abort(422, 'Le client associé à la facture est requis.');
-        }
+        $clientId = $this->resolveTargetClientId($request);
 
         $last    = FactureVente::where('client_id', $clientId)->orderByDesc('id')->value('numero');
         $nextNum = $last ? (intval(substr($last, 4)) + 1) : 1;
@@ -64,7 +58,7 @@ class FactureVenteController extends Controller
 
         $fichier = null;
         if ($request->hasFile('image')) {
-            $fichier = $request->file('image')->store("factures_ventes/{$clientId}", 'public');
+            $fichier = $request->file('image')->store("factures_ventes/{$clientId}", 'local');
         }
 
         $facture = FactureVente::create([
@@ -107,11 +101,11 @@ class FactureVenteController extends Controller
         $facture = FactureVente::findOrFail($id);
         $this->authorizeAccess($request, $facture->client_id);
 
-        if (!$facture->fichier || !Storage::disk('public')->exists($facture->fichier)) {
+        if (!$facture->fichier || !Storage::disk('local')->exists($facture->fichier)) {
             abort(404, 'Image non disponible.');
         }
 
-        $path = Storage::disk('public')->path($facture->fichier);
+        $path = Storage::disk('local')->path($facture->fichier);
         $mime = mime_content_type($path) ?: 'application/octet-stream';
 
         return response()->file($path, [
@@ -153,7 +147,7 @@ class FactureVenteController extends Controller
         $clientId = $facture->client_id;
 
         if ($facture->fichier) {
-            Storage::disk('public')->delete($facture->fichier);
+            Storage::disk('local')->delete($facture->fichier);
         }
 
         $facture->delete();
@@ -177,7 +171,7 @@ class FactureVenteController extends Controller
     {
         $user  = $request->user();
         $query = $user instanceof Administrateur
-            ? FactureVente::with('client')
+            ? $this->scopeToUser(FactureVente::with('client'), $user)
             : FactureVente::where('client_id', $user->id);
 
         $rows = $query->get();
@@ -197,7 +191,7 @@ class FactureVenteController extends Controller
         try {
             $user  = $request->user();
             $query = $user instanceof Administrateur
-                ? FactureVente::with('client')
+                ? $this->scopeToUser(FactureVente::with('client'), $user)
                 : FactureVente::where('client_id', $user->id);
 
             $ids = $request->query('ids');
@@ -296,7 +290,7 @@ class FactureVenteController extends Controller
         try {
             $user  = $request->user();
             $query = $user instanceof Administrateur
-                ? FactureVente::with('client')
+                ? $this->scopeToUser(FactureVente::with('client'), $user)
                 : FactureVente::where('client_id', $user->id);
 
             $ids = $request->query('ids');
@@ -468,14 +462,6 @@ class FactureVenteController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
-        }
-    }
-
-    private function authorizeAccess(Request $request, int $clientId): void
-    {
-        $user = $request->user();
-        if (!($user instanceof Administrateur) && $user->id !== $clientId) {
-            abort(403, 'Accès non autorisé.');
         }
     }
 }

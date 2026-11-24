@@ -8,6 +8,7 @@ use App\Models\ClientInvitation;
 use App\Models\FactureAchat;
 use App\Models\FactureVente;
 use App\Models\DeclarationFiscale;
+use App\Support\AvatarStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
@@ -43,20 +44,19 @@ class ClientController extends Controller
         return $user;
     }
 
+    /** A client of this admin's cabinet, or 404 — never another cabinet's client. */
+    private function findManagedClient(Administrateur $admin, int $id): Client
+    {
+        return Client::visibleTo($admin)->findOrFail($id);
+    }
+
     // ── CRUD ───────────────────────────────────────────────────
 
     public function index(Request $request)
     {
         $admin = $this->adminGuard($request);
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
-
-        $adminEntreprise = trim(strtolower($admin->entreprise ?? ''));
-
-        $query = Client::where('is_approved', true)->orderBy('created_at', 'desc');
-
-        if ($adminEntreprise !== '') {
-            $query->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]);
-        }
+        $query = Client::where('is_approved', true)->orderBy('created_at', 'desc')->visibleTo($admin);
 
         $clients = $query->get()->map(fn ($c) => $this->withCounts($c));
 
@@ -67,14 +67,7 @@ class ClientController extends Controller
     {
         $admin = $this->adminGuard($request);
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
-
-        $adminEntreprise = trim(strtolower($admin->entreprise ?? ''));
-
-        $query = Client::where('is_approved', false)->orderBy('created_at', 'desc');
-
-        if ($adminEntreprise !== '') {
-            $query->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]);
-        }
+        $query = Client::where('is_approved', false)->orderBy('created_at', 'desc')->visibleTo($admin);
 
         return response()->json($query->get());
     }
@@ -84,7 +77,7 @@ class ClientController extends Controller
         $admin = $this->adminGuard($request);
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
 
-        $client = Client::findOrFail($id);
+        $client = $this->findManagedClient($admin, $id);
         $client->update(['is_approved' => true, 'is_actif' => true]);
 
         // Notify the client by email
@@ -174,7 +167,7 @@ class ClientController extends Controller
             'avatar'     => 'nullable|string',
         ]);
 
-        $client = Client::findOrFail($id);
+        $client = $this->findManagedClient($admin, $id);
 
         $updateData = [
             'nom'        => $validated['nom'],
@@ -185,18 +178,8 @@ class ClientController extends Controller
 
         // Save new avatar if provided
         if (!empty($validated['avatar'])) {
-            // Delete old file
-            if ($client->avatar && str_contains($client->avatar, '/uploads/avatars/')) {
-                $old = public_path('uploads/avatars/' . basename($client->avatar));
-                if (file_exists($old)) @unlink($old);
-            }
-            $base64 = $validated['avatar'];
-            $data   = str_contains($base64, ',') ? explode(',', $base64)[1] : $base64;
-            $dir    = public_path('uploads/avatars');
-            if (!is_dir($dir)) mkdir($dir, 0755, true);
-            $filename = 'client_' . $client->id . '.jpg';
-            file_put_contents($dir . '/' . $filename, base64_decode($data));
-            $updateData['avatar'] = config('app.url') . '/uploads/avatars/' . $filename;
+            // Same filename every time: the new image overwrites the old one.
+            $updateData['avatar'] = AvatarStorage::store($validated['avatar'], 'client_' . $client->id);
         }
 
         $client->update($updateData);
@@ -216,7 +199,7 @@ class ClientController extends Controller
         $admin = $this->adminGuard($request);
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
 
-        $client    = Client::findOrFail($id);
+        $client    = $this->findManagedClient($admin, $id);
         $nom       = $client->nom;
         $email     = $client->email;
         $isPending = !$client->is_approved;
@@ -265,10 +248,7 @@ class ClientController extends Controller
             );
         }
 
-        if ($client->avatar && str_contains($client->avatar, '/uploads/avatars/')) {
-            $path = public_path('uploads/avatars/' . basename($client->avatar));
-            if (file_exists($path)) @unlink($path);
-        }
+        AvatarStorage::delete($client->avatar);
 
         $client->tokens()->delete();
         $client->delete();
@@ -289,7 +269,7 @@ class ClientController extends Controller
         $admin = $this->adminGuard($request);
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
 
-        $client = Client::findOrFail($id);
+        $client = $this->findManagedClient($admin, $id);
         $client->update(['is_actif' => !$client->is_actif]);
         $fresh  = $client->fresh();
 
@@ -311,13 +291,7 @@ class ClientController extends Controller
         $admin = $this->adminGuard($request);
         if ($admin instanceof \Illuminate\Http\JsonResponse) return $admin;
 
-        $client = Client::findOrFail($id);
-
-        $adminEntreprise = trim(strtolower($admin->entreprise ?? ''));
-        if ($adminEntreprise !== '' && trim(strtolower($client->entreprise ?? '')) !== $adminEntreprise) {
-            return response()->json(['message' => 'Accès refusé.'], 403);
-        }
-
+        $client = $this->findManagedClient($admin, $id);
         if (!$client->is_actif) {
             return response()->json(['message' => 'Ce compte client est désactivé.'], 422);
         }
@@ -342,7 +316,7 @@ class ClientController extends Controller
             'message' => 'required|string|max:5000',
         ]);
 
-        $client = Client::findOrFail($id);
+        $client = $this->findManagedClient($admin, $id);
 
         try {
             Mail::send([], [], function ($mail) use ($client, $admin, $validated) {

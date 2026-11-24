@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesClientAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use App\Models\Administrateur;
 use App\Models\Client;
 use App\Models\Notification;
 use App\Models\FactureAchat;
@@ -15,8 +17,20 @@ use App\Models\EcheancierLeasing;
 
 class AdminDocumentController extends Controller
 {
+    use AuthorizesClientAccess;
+
+    /** Every action here is admin-only and limited to the admin's own cabinet. */
+    private function ensureAdmin(Request $request): Administrateur
+    {
+        $user = $request->user();
+        abort_unless($user instanceof Administrateur, 403, 'Accès refusé.');
+        return $user;
+    }
+
     public function updateStatus(Request $request, string $source, int $id)
     {
+        $this->ensureAdmin($request);
+
         $modelMap = [
             'achat'   => FactureAchat::class,
             'vente'   => FactureVente::class,
@@ -39,23 +53,30 @@ class AdminDocumentController extends Controller
             return response()->json(['error' => 'Source invalide'], 422);
         }
 
-        $model = $modelMap[$source]::findOrFail($id);
         $field = $fieldMap[$source];
-        $model->update([$field => $request->input('value')]);
+        $value = $request->validate([
+            'value' => $field === 'rapproche' ? 'required|boolean' : 'required|string|max:50',
+        ])['value'];
+
+        $model = $modelMap[$source]::findOrFail($id);
+        $this->authorizeAccess($request, $model->client_id);
+        $model->update([$field => $value]);
 
         return response()->json(['success' => true]);
     }
 
     public function notifyRename(Request $request)
     {
+        $admin = $this->ensureAdmin($request);
+
         $request->validate([
             'client_id' => 'required|integer',
-            'source'    => 'required|string',
-            'old_name'  => 'required|string',
-            'new_name'  => 'required|string',
+            'source'    => 'required|string|max:50',
+            'old_name'  => 'required|string|max:255',
+            'new_name'  => 'required|string|max:255',
         ]);
 
-        $client = Client::find($request->client_id);
+        $client = Client::visibleTo($admin)->find($request->client_id);
         if (!$client) {
             return response()->json(['message' => 'Client non trouvé.'], 404);
         }

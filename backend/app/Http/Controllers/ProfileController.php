@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Administrateur;
 use App\Http\Controllers\NotificationController;
+use App\Support\AvatarStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +28,12 @@ class ProfileController extends Controller
             if ($model::where('email', $validated['email'])->where('id', '!=', $user->id)->exists()) {
                 throw ValidationException::withMessages(['email' => 'Email déjà utilisé.']);
             }
+        }
+
+        // An admin's entreprise is their cabinet: changing it would hand them
+        // another cabinet's clients. Only a super admin may move cabinets.
+        if ($user instanceof Administrateur && !$user->is_super_admin) {
+            unset($validated['entreprise']);
         }
 
         $user->update($validated);
@@ -58,32 +65,18 @@ class ProfileController extends Controller
         $role     = $isAdmin ? 'admin' : 'client';
         $base64   = $request->input('avatar');
 
-        // Delete old file if exists
-        if ($user->avatar && str_contains($user->avatar, '/uploads/avatars/')) {
-            $oldPath = public_path('uploads/avatars/' . basename($user->avatar));
-            if (file_exists($oldPath)) @unlink($oldPath);
-        }
-
         $avatarUrl = null;
 
-        if ($base64) {
-            // Strip data URI prefix  e.g. "data:image/png;base64,..."
-            $data = str_contains($base64, ',') ? explode(',', $base64)[1] : $base64;
-            $imageData = base64_decode($data);
-
-            $dir = public_path('uploads/avatars');
-            if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-            $filename = $role . '_' . $user->id . '.jpg';
-            file_put_contents($dir . '/' . $filename, $imageData);
-
+        if (!$base64) {
+            AvatarStorage::delete($user->avatar);
+        } else {
             // Cache-bust: the filename is stable per user (always overwritten in
             // place), so without a version suffix the URL never changes between
             // uploads — React sees the same string and skips re-rendering the
             // <img>, and the browser keeps showing its cached copy until a full
             // page reload forces a re-fetch. Appending a timestamp makes every
             // upload produce a genuinely new URL.
-            $avatarUrl = config('app.url') . '/uploads/avatars/' . $filename . '?v=' . time();
+            $avatarUrl = AvatarStorage::store($base64, $role . '_' . $user->id) . '?v=' . time();
         }
 
         $user->update(['avatar' => $avatarUrl]);

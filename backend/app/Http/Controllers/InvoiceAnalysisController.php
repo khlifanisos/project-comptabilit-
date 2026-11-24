@@ -99,11 +99,11 @@ never leave this field empty and never guess a currency that is not evidenced on
     public static function extractData(string $storagePath): array
     {
         $apiKey = config('services.gemini.key');
-        if (!$apiKey || !Storage::disk('public')->exists($storagePath)) {
+        if (!$apiKey || !Storage::disk('local')->exists($storagePath)) {
             return ['lignes' => [], 'resume' => [], 'devise' => 'TND'];
         }
 
-        $fullPath = Storage::disk('public')->path($storagePath);
+        $fullPath = Storage::disk('local')->path($storagePath);
         $mime     = mime_content_type($fullPath) ?: 'image/jpeg';
         $base64   = base64_encode(file_get_contents($fullPath));
 
@@ -535,13 +535,14 @@ never leave this field empty and never guess a currency that is not evidenced on
             : $user->id;
 
         if (!$clientId) return;
+        if ($user instanceof Administrateur && !$user->canAccessClient($clientId)) return;
 
         $source = $request->input('source');
         if (!in_array($source, ['achat', 'vente'], true)) return;
 
         try {
             $path = "excel_exports/{$clientId}/" . uniqid() . "_{$filename}";
-            Storage::disk('public')->put($path, $content);
+            Storage::disk('local')->put($path, $content);
 
             ExcelExport::create([
                 'client_id' => $clientId,

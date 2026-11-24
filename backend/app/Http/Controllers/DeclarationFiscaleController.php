@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesClientAccess;
 use App\Models\DeclarationFiscale;
 use App\Models\Administrateur;
 use Illuminate\Http\Request;
@@ -13,16 +14,15 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class DeclarationFiscaleController extends Controller
 {
+    use AuthorizesClientAccess;
+
     public function index(Request $request)
     {
         $user = $request->user();
 
         if ($user instanceof Administrateur) {
-            $adminEntreprise = trim(strtolower($user->entreprise ?? ''));
             $query = DeclarationFiscale::with('client')->latest();
-            if ($adminEntreprise !== '') {
-                $query->whereHas('client', fn($q) => $q->whereRaw('LOWER(TRIM(entreprise)) = ?', [$adminEntreprise]));
-            }
+            $this->scopeToUser($query, $user);
             $data = $query->paginate(100);
         } else {
             $data = DeclarationFiscale::where('client_id', $user->id)->latest()->paginate(100);
@@ -56,6 +56,7 @@ class DeclarationFiscaleController extends Controller
                     'message' => 'Aucun compte client associé à cet administrateur.',
                 ], 422);
             }
+            $this->authorizeAccess($request, (int) $clientId);
         } else {
             $clientId = $user->id;
         }
@@ -107,7 +108,7 @@ class DeclarationFiscaleController extends Controller
     {
         $user = $request->user();
         $rows = $user instanceof Administrateur
-            ? DeclarationFiscale::with('client')->get()
+            ? $this->scopeToUser(DeclarationFiscale::with('client'), $user)->get()
             : DeclarationFiscale::where('client_id', $user->id)->get();
 
         $csv = "Type;Période;Date limite;Montant;Statut\n";
@@ -126,7 +127,7 @@ class DeclarationFiscaleController extends Controller
         try {
             $user  = $request->user();
             $query = $user instanceof Administrateur
-                ? DeclarationFiscale::with('client')
+                ? $this->scopeToUser(DeclarationFiscale::with('client'), $user)
                 : DeclarationFiscale::where('client_id', $user->id);
 
             $ids = $request->query('ids');
@@ -224,11 +225,4 @@ class DeclarationFiscaleController extends Controller
         }
     }
 
-    private function authorizeAccess(Request $request, int $clientId): void
-    {
-        $user = $request->user();
-        if (!($user instanceof Administrateur) && $user->id !== $clientId) {
-            abort(403, 'Accès non autorisé.');
-        }
-    }
 }
