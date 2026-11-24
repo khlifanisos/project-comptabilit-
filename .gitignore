@@ -42,3 +42,6 @@ backend/public/uploads/avatars/
 
 # Real database dumps (client data) — never commit
 /comptabilite_db*.sql
+
+# Database exports
+exports/

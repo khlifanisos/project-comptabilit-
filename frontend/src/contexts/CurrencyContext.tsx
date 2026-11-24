@@ -5,11 +5,6 @@ export interface CurrencyOption { code: string; label: string }
 
 export const CURRENCY_OPTIONS: CurrencyOption[] = [
   { code: 'TND', label: 'Dinar tunisien (TND)' },
-  { code: 'MAD', label: 'Dirham marocain (MAD)' },
-  { code: 'DZD', label: 'Dinar algérien (DZD)' },
-  { code: 'EUR', label: 'Euro (EUR)' },
-  { code: 'USD', label: 'Dollar américain (USD)' },
-  { code: 'GBP', label: 'Livre sterling (GBP)' },
 ]
 
 const DEFAULT_DEVISE = 'TND'

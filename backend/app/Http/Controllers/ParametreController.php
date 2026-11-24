@@ -26,7 +26,7 @@ class ParametreController extends Controller
         }
 
         $validated = $request->validate([
-            'devise'   => 'sometimes|required|string|max:10',
+            'devise'   => 'sometimes|required|string|in:TND',
             'whatsapp' => 'sometimes|nullable|string|max:30',
         ]);
 
