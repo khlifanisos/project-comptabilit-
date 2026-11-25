@@ -147,7 +147,8 @@ class DocumentFiscalController extends Controller
             abort(404, 'Fichier non disponible.');
         }
 
-        $headers = ['Content-Type' => 'application/pdf', 'Cache-Control' => 'private, max-age=3600'];
+        // no-store: the browser must not keep (partial) copies of these large files around
+        $headers = ['Content-Type' => 'application/pdf', 'Cache-Control' => 'private, no-store'];
 
         return $request->boolean('download')
             ? $disk->download($doc->fichier, (Str::slug($doc->titre) ?: 'document') . '.pdf', $headers)

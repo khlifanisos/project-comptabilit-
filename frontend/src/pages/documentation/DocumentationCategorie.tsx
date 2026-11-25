@@ -108,19 +108,37 @@ export default function DocumentationCategorie() {
     if (!selected) { setPdfUrl(null); return }
     let objectUrl: string | null = null
     let cancelled = false
+    // Switching documents aborts the previous download instead of letting it run on in the background.
+    const controller = new AbortController()
     setPdfLoading(true)
     setPdfError(false)
     setPdfUrl(null)
-    api.get(`/documents-fiscaux/${selected.id}/fichier`, { responseType: 'blob', timeout: 120000 })
+    api.get(`/documents-fiscaux/${selected.id}/fichier`, {
+      responseType: 'blob',
+      timeout: 120000,
+      signal: controller.signal,
+      // Keep these large PDFs out of the browser's HTTP cache: Chrome otherwise keeps partially
+      // downloaded copies and later tries to complete them with Range requests, which fail
+      // intermittently and surfaced as "Impossible de charger le document."
+      // The unique query string also sidesteps any stale copy already sitting in the cache.
+      headers: { 'Cache-Control': 'no-store' },
+      params: { _: Date.now() },
+    })
       .then((r: { data: Blob }) => {
         if (cancelled) return
+        if (!r.data || r.data.size === 0) throw new Error('Empty PDF response')
         objectUrl = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }))
         setPdfUrl(objectUrl)
       })
-      .catch(() => { if (!cancelled) setPdfError(true) })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        console.error('PDF load failed', err)
+        setPdfError(true)
+      })
       .finally(() => { if (!cancelled) setPdfLoading(false) })
     return () => {
       cancelled = true
+      controller.abort()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [selected?.id])
