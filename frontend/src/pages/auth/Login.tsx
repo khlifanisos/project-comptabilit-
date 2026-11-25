@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, Navigate } from 'react-router-dom'
 import {
   Box, Typography, TextField, Button,
   InputAdornment, IconButton, Divider, Alert, CircularProgress,
@@ -22,7 +22,7 @@ const ACCENT  = '#3B82F6'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { login, loading } = useAuth()
+  const { login, loading, isAuthenticated } = useAuth()
   const [role, setRole]                   = useState<UserRole>('client')
   const [email, setEmail]                 = useState('')
   const [password, setPassword]           = useState('')
@@ -34,14 +34,19 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setEmailError(''); setPasswordError(''); setGeneralError('')
-    if (!email)    { setEmailError('Veuillez saisir votre adresse email.'); return }
-    if (!password) { setPasswordError('Veuillez saisir votre mot de passe.'); return }
+    const cleanEmail = email.trim()
+    if (!cleanEmail) { setEmailError('Veuillez saisir votre adresse email.'); return }
+    if (!password)   { setPasswordError('Veuillez saisir votre mot de passe.'); return }
     try {
-      const actualRole = await login(email, password, role)
+      await login(cleanEmail, password, role)
       toast.success('Connexion réussie !')
-      navigate('/accueil')
+      navigate('/accueil', { replace: true })
     } catch (err: any) {
       if (!err.response) { setGeneralError('Impossible de contacter le serveur.'); return }
+      if (err.response.status === 429) {
+        setGeneralError('Trop de tentatives de connexion. Réessayez dans une minute.')
+        return
+      }
       const errors = err.response?.data?.errors || {}
       const msg    = err.response?.data?.message || ''
       if (errors.email)         setEmailError(Array.isArray(errors.email) ? errors.email[0] : errors.email)
@@ -53,6 +58,9 @@ export default function Login() {
   }
 
   const isAdmin = role === 'admin'
+
+  // Already logged in: no reason to show the form again.
+  if (isAuthenticated) return <Navigate to="/accueil" replace />
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: '#F8FAFC' }}>
@@ -148,6 +156,7 @@ export default function Login() {
           <Box className="reveal-up is-visible" style={{ animationDelay: '120ms' }} component="form" onSubmit={handleSubmit}>
             <TextField
               fullWidth label="Adresse email" type="email"
+              autoComplete="email" autoFocus
               value={email}
               onChange={(e) => { setEmail(e.target.value); setEmailError('') }}
               error={!!emailError} helperText={emailError}
@@ -172,6 +181,7 @@ export default function Login() {
             <TextField
               fullWidth label="Mot de passe"
               type={showPwd ? 'text' : 'password'}
+              autoComplete="current-password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setPasswordError('') }}
               error={!!passwordError} helperText={passwordError}
@@ -192,7 +202,8 @@ export default function Login() {
                 ),
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPwd(!showPwd)} edge="end" size="small">
+                    <IconButton onClick={() => setShowPwd(!showPwd)} edge="end" size="small"
+                      aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>
                       {showPwd ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
                     </IconButton>
                   </InputAdornment>
@@ -238,22 +249,6 @@ export default function Login() {
             <Typography component={Link} to="/"
               sx={{ display: 'block', mt: 1, color: '#94A3B8', fontSize: 12.5, textDecoration: 'none', '&:hover': { color: PRIMARY } }}>
               ← Retour à l'accueil
-            </Typography>
-          </Box>
-
-          <Box className="reveal-up is-visible" style={{ animationDelay: '240ms' }} sx={{
-            mt: 3, p: 1.8, borderRadius: '10px',
-            bgcolor: '#F8FAFC',
-            border: '1px solid #E2E8F0',
-          }}>
-            <Typography sx={{ color: '#94A3B8', fontSize: 10.5, fontWeight: 700, mb: 0.6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-              Comptes de démonstration
-            </Typography>
-            <Typography sx={{ color: '#64748B', fontSize: 11, lineHeight: 1.7 }}>
-              Admin : admin@comptabilite.ma / Admin123!
-            </Typography>
-            <Typography sx={{ color: '#64748B', fontSize: 11, lineHeight: 1.7 }}>
-              Client : client@exemple.ma / Client123!
             </Typography>
           </Box>
 

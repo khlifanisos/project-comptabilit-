@@ -183,7 +183,7 @@ export default function AdminClients() {
     setImpersonatingId(c.id)
     try {
       const res = await api.post(`/admin/clients/${c.id}/impersonate`)
-      const url = `/impersonate?token=${encodeURIComponent(res.data.token)}&user=${encodeURIComponent(JSON.stringify(res.data.user))}`
+      const url = `/impersonate#token=${encodeURIComponent(res.data.token)}&user=${encodeURIComponent(JSON.stringify(res.data.user))}`
       window.open(url, '_blank', 'noopener')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message

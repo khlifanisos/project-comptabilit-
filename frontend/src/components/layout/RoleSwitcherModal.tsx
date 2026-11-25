@@ -55,7 +55,7 @@ export default function RoleSwitcherModal() {
     setImpersonatingId(c.id)
     try {
       const res = await api.post(`/admin/clients/${c.id}/impersonate`)
-      const url = `/impersonate?token=${encodeURIComponent(res.data.token)}&user=${encodeURIComponent(JSON.stringify(res.data.user))}`
+      const url = `/impersonate#token=${encodeURIComponent(res.data.token)}&user=${encodeURIComponent(JSON.stringify(res.data.user))}`
       window.open(url, '_blank', 'noopener')
       closeDialog()
     } catch (err: unknown) {

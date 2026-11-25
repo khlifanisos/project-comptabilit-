@@ -341,48 +341,50 @@ class AuthController extends Controller
             'role'     => 'nullable|in:admin,client',
         ]);
 
-        $role = $request->input('role');
+        $email = mb_strtolower(trim($request->input('email')));
+        $role  = $request->input('role');
 
-        // Toujours vérifier les deux tables — le rôle choisi est préféré en premier
-        if ($role === 'admin' || !$role) {
-            $admin = Administrateur::where('email', $request->email)->first();
-            if ($admin && Hash::check($request->password, $admin->mot_de_passe)) {
-                $token = $admin->createToken('auth-token')->plainTextToken;
-                return response()->json([
-                    'token' => $token,
-                    'user'  => array_merge($admin->toArray(), ['role' => 'admin']),
-                ]);
+        // The selected tab is tried first, then the other table, so someone who
+        // picked the wrong tab still gets in with the right role.
+        $order = $role === 'client'
+            ? [Client::class, Administrateur::class]
+            : [Administrateur::class, Client::class];
+
+        foreach ($order as $model) {
+            // The email columns use a case-insensitive collation, so this matches any casing.
+            $account = $model::where('email', $email)->first();
+            if (!$account) {
+                // Same hashing cost as for an existing account, so response time
+                // doesn't reveal whether the email is registered.
+                Hash::check($request->password, self::dummyHash());
+                continue;
             }
-        }
+            if (!Hash::check($request->password, $account->mot_de_passe)) {
+                continue;
+            }
 
-        if ($role === 'client' || !$role) {
-            $client = Client::where('email', $request->email)->first();
-            if ($client && Hash::check($request->password, $client->mot_de_passe)) {
-                if (!$client->is_actif) {
+            if ($account instanceof Client) {
+                if (!$account->is_actif) {
                     throw ValidationException::withMessages(['email' => 'Compte désactivé. Contactez l\'administrateur.']);
                 }
-                $client->update(['last_login_at' => now()]);
-                $token = $client->createToken('auth-token')->plainTextToken;
-                return response()->json([
-                    'token' => $token,
-                    'user'  => array_merge($client->toArray(), ['role' => 'client']),
-                ]);
+                $account->update(['last_login_at' => now()]);
             }
-        }
 
-        // Si role=client mais les identifiants correspondent à un admin → connexion admin
-        if ($role === 'client') {
-            $admin = Administrateur::where('email', $request->email)->first();
-            if ($admin && Hash::check($request->password, $admin->mot_de_passe)) {
-                $token = $admin->createToken('auth-token')->plainTextToken;
-                return response()->json([
-                    'token' => $token,
-                    'user'  => array_merge($admin->toArray(), ['role' => 'admin']),
-                ]);
-            }
+            return response()->json([
+                'token' => $account->createToken('auth-token')->plainTextToken,
+                'user'  => array_merge($account->toArray(), [
+                    'role' => $account instanceof Administrateur ? 'admin' : 'client',
+                ]),
+            ]);
         }
 
         throw ValidationException::withMessages(['email' => 'Email ou mot de passe incorrect.']);
+    }
+
+    private static function dummyHash(): string
+    {
+        static $hash = null;
+        return $hash ??= Hash::make('timing-equalizer-' . Str::random(16));
     }
 
     public function forgotPassword(Request $request)
@@ -462,7 +464,8 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()?->tokens()->delete();
+        // Only end this session: other devices (and an admin's impersonation tab) stay logged in.
+        $request->user()?->currentAccessToken()?->delete();
         return response()->json(['message' => 'Déconnecté.']);
     }
 

@@ -10,6 +10,7 @@ use App\Models\FactureVente;
 use App\Models\DeclarationFiscale;
 use App\Support\AvatarStorage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class ClientController extends Controller
@@ -296,7 +297,8 @@ class ClientController extends Controller
             return response()->json(['message' => 'Ce compte client est désactivé.'], 422);
         }
 
-        $token = $client->createToken('impersonation')->plainTextToken;
+        // Short-lived: an impersonation session should not outlast the admin's task.
+        $token = $client->createToken('impersonation', ['*'], now()->addHours(2))->plainTextToken;
 
         return response()->json([
             'token' => $token,
@@ -442,7 +444,7 @@ class ClientController extends Controller
                 if ($name) $m->to($to, $name);
             });
         } catch (\Exception $e) {
-            \Log::error('ClientController mail error: ' . $e->getMessage());
+            Log::error('ClientController mail error: ' . $e->getMessage());
         }
     }
 
