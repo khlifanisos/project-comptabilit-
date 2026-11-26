@@ -20,8 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         $middleware->alias([
-            'auth' => \App\Http\Middleware\EnsureApiAuthRedirectsJson::class,
+            'auth'  => \App\Http\Middleware\EnsureApiAuthRedirectsJson::class,
+            'admin' => \App\Http\Middleware\EnsureAdministrateur::class,
         ]);
         $middleware->validateCsrfTokens(except: ['api/*']);
     })

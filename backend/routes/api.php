@@ -153,8 +153,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/audit/balances/{type}',     [AuditBalanceController::class, 'destroy']);
     Route::get('/audit/balances-export',        [AuditBalanceController::class, 'exportConsolidation']);
 
+    // ── Back-office (administrateurs uniquement) ─────────────────
+    // Client and admin ids overlap (two tables): the 'admin' guard keeps a
+    // client from ever reaching controllers written for an Administrateur.
+    Route::middleware('admin')->group(function () {
+
     // Tickets (super admin assigne, admin exécute, super admin valide)
-    Route::get('/tickets',                  [TicketController::class, 'index']);
+    Route::get('/tickets',                 [TicketController::class, 'index']);
     Route::get('/tickets/assignable-admins', [TicketController::class, 'assignableAdmins']);
     Route::get('/tickets/assignable-clients', [TicketController::class, 'assignableClients']);
     Route::post('/tickets',                 [TicketController::class, 'store']);
@@ -188,6 +193,23 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/facturation/contrats/{id}',            [FacturationController::class, 'updateContrat']);
     Route::delete('/facturation/contrats/{id}',         [FacturationController::class, 'destroyContrat']);
 
+    // Admin — document actions
+    Route::post('/admin/documents/notify-rename',           [AdminDocumentController::class, 'notifyRename']);
+    Route::patch('/admin/documents/{source}/{id}/status',   [AdminDocumentController::class, 'updateStatus']);
+
+    // Admin — gestion clients
+    Route::get('/admin/clients',                    [ClientController::class, 'index']);
+    Route::get('/admin/clients/pending',            [ClientController::class, 'pending']);
+    Route::post('/admin/clients/invite',            [ClientController::class, 'invite']);
+    Route::put('/admin/clients/{id}',               [ClientController::class, 'update']);
+    Route::delete('/admin/clients/{id}',            [ClientController::class, 'destroy']);
+    Route::patch('/admin/clients/{id}/toggle',      [ClientController::class, 'toggleActive']);
+    Route::post('/admin/clients/{id}/impersonate',  [ClientController::class, 'impersonate'])->middleware('throttle:10,1');
+    Route::post('/admin/clients/{id}/send-email',   [ClientController::class, 'sendEmail'])->middleware('throttle:10,1');
+    Route::post('/admin/clients/{id}/approve',      [ClientController::class, 'approve']);
+
+    }); // end admin-only
+
     // Fichiers Excel archivés (analyses de factures converties)
     Route::get('/excel-exports',              [ExcelExportController::class, 'index']);
     Route::get('/excel-exports/{id}/fichier', [ExcelExportController::class, 'fichier']);
@@ -206,19 +228,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/documents-fiscaux',             [DocumentFiscalController::class, 'store']);
     Route::put('/documents-fiscaux/{id}',         [DocumentFiscalController::class, 'update'])->whereNumber('id');
     Route::delete('/documents-fiscaux/{id}',      [DocumentFiscalController::class, 'destroy'])->whereNumber('id');
-
-    // Admin — document actions
-    Route::post('/admin/documents/notify-rename',           [AdminDocumentController::class, 'notifyRename']);
-    Route::patch('/admin/documents/{source}/{id}/status',   [AdminDocumentController::class, 'updateStatus']);
-
-    // Admin — gestion clients
-    Route::get('/admin/clients',                    [ClientController::class, 'index']);
-    Route::get('/admin/clients/pending',            [ClientController::class, 'pending']);
-    Route::post('/admin/clients/invite',            [ClientController::class, 'invite']);
-    Route::put('/admin/clients/{id}',               [ClientController::class, 'update']);
-    Route::delete('/admin/clients/{id}',            [ClientController::class, 'destroy']);
-    Route::patch('/admin/clients/{id}/toggle',      [ClientController::class, 'toggleActive']);
-    Route::post('/admin/clients/{id}/impersonate',  [ClientController::class, 'impersonate']);
-    Route::post('/admin/clients/{id}/send-email',   [ClientController::class, 'sendEmail']);
-    Route::post('/admin/clients/{id}/approve',      [ClientController::class, 'approve']);
 });

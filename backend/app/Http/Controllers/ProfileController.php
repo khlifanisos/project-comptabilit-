@@ -114,6 +114,9 @@ class ProfileController extends Controller
         }
 
         $user->update(['mot_de_passe' => Hash::make($request->password)]);
+        // A stolen token must not survive a password change: log out every other
+        // session, keep only the one that made this request.
+        $user->tokens()->where('id', '!=', $user->currentAccessToken()?->id)->delete();
         $role = $user instanceof Administrateur ? 'admin' : 'client';
 
         if ($role === 'client') {

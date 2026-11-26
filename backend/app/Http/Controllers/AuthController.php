@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -344,6 +345,16 @@ class AuthController extends Controller
         $email = mb_strtolower(trim($request->input('email')));
         $role  = $request->input('role');
 
+        // Per-account lockout, on top of the per-IP route throttle: stops a password
+        // being guessed slowly from many IPs. Only failures count (cleared on success).
+        $lockKey = 'login-fail:' . sha1($email);
+        if (RateLimiter::tooManyAttempts($lockKey, self::MAX_LOGIN_FAILURES)) {
+            $minutes = (int) ceil(RateLimiter::availableIn($lockKey) / 60);
+            throw ValidationException::withMessages([
+                'email' => "Trop de tentatives de connexion. Réessayez dans {$minutes} minute(s).",
+            ])->status(429);
+        }
+
         // The selected tab is tried first, then the other table, so someone who
         // picked the wrong tab still gets in with the right role.
         $order = $role === 'client'
@@ -370,6 +381,8 @@ class AuthController extends Controller
                 $account->update(['last_login_at' => now()]);
             }
 
+            RateLimiter::clear($lockKey);
+
             return response()->json([
                 'token' => $account->createToken('auth-token')->plainTextToken,
                 'user'  => array_merge($account->toArray(), [
@@ -378,8 +391,12 @@ class AuthController extends Controller
             ]);
         }
 
+        RateLimiter::hit($lockKey, self::LOGIN_LOCKOUT_SECONDS);
         throw ValidationException::withMessages(['email' => 'Email ou mot de passe incorrect.']);
     }
+
+    private const MAX_LOGIN_FAILURES    = 8;
+    private const LOGIN_LOCKOUT_SECONDS = 900; // 15 min
 
     private static function dummyHash(): string
     {

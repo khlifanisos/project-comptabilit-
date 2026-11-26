@@ -1,0 +1,13 @@
+# This project lives inside XAMPP's htdocs, so Apache would otherwise serve
+# every file in it to the network: backend/.env (DB password, API keys),
+# storage/ (client invoices), debug scripts, SQL dumps…
+#
+# The app never needs Apache: the API runs with `php artisan serve` (or Docker)
+# and the frontend with Vite. Deny everything here.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>

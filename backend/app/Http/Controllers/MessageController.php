@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class MessageController extends Controller
 {
@@ -234,9 +235,19 @@ class MessageController extends Controller
 
         $path = Storage::disk('local')->path($message->attachment_path);
 
+        // Attachments accept any file type. Only passive media is shown inline;
+        // anything that a browser could execute (HTML, SVG, XML, JS, PDF with
+        // scripts…) is forced to download as opaque bytes, and the sandbox CSP
+        // stops it from running even if it is opened directly.
+        $mime   = strtolower((string) $message->attachment_mime);
+        $inline = (bool) preg_match('#^(image/(png|jpe?g|gif|webp)|audio/[\w.+-]+|video/[\w.+-]+)$#', $mime);
+        $name   = $message->attachment_name ?: basename($message->attachment_path);
+
         return response()->file($path, [
-            'Content-Type'  => $message->attachment_mime ?: 'application/octet-stream',
-            'Cache-Control' => 'private, max-age=3600',
+            'Content-Type'            => $inline ? $mime : 'application/octet-stream',
+            'Content-Disposition'     => ($inline ? 'inline' : 'attachment') . '; filename="' . addcslashes(Str::ascii($name), '"\\') . '"',
+            'Content-Security-Policy' => "sandbox; default-src 'none'",
+            'Cache-Control'           => 'private, max-age=3600',
         ]);
     }
 
