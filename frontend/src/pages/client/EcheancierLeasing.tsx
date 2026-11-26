@@ -483,7 +483,7 @@ export default function EcheancierLeasing() {
         gap: 1.5, mb: 3,
       }}>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Échéancier leasing
           </Typography>
           <Typography color="text.secondary" fontSize={14}>Suivi des contrats de crédit-bail</Typography>

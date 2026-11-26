@@ -116,7 +116,23 @@ export function getTheme(mode: PaletteMode) {
 
       MuiInputBase: {
         styleOverrides: {
-          root: { fontSize: '0.875rem' },
+          root: ({ theme }) => ({
+            fontSize: '0.875rem',
+            // iPhone Safari zooms the whole page when a field under 16px gets focus — keep phones at 16px.
+            [theme.breakpoints.down('sm')]: { fontSize: '16px' },
+          }),
+          input: {
+            // Chrome paints autofilled fields with its own (blue in some themes) background,
+            // which covers the field and clashes with the floating label. Repaint it with
+            // the field's own colours instead.
+            '&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus': {
+              WebkitBoxShadow: `0 0 0 100px ${isDark ? '#131B2C' : '#FFFFFF'} inset`,
+              WebkitTextFillColor: isDark ? '#E2E8F0' : '#0F172A',
+              caretColor: isDark ? '#E2E8F0' : '#0F172A',
+              borderRadius: 'inherit',
+              transition: 'background-color 9999s ease-out 0s',
+            },
+          },
         },
       },
 

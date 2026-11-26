@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Box, Typography, Card, CardContent, Button, IconButton, Tooltip, Chip, Tabs, Tab,
@@ -191,7 +192,7 @@ export function ClientFacturationFolder({ clientId, onChanged }: { clientId: num
   const changed = () => { loadFiche(); onChanged?.() }
 
   const stat = (label: string, value: string, color: string) => (
-    <Box sx={{ flex: '1 1 150px', p: 1.5, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+    <Box sx={{ flex: '1 1 150px', p: 1.5, borderRadius: 2, bgcolor: 'action.hover', border: (t: Theme) => `1px solid ${t.palette.divider}` }}>
       <Typography fontSize={11.5} color="text.secondary" fontWeight={600}>{label}</Typography>
       <Typography fontSize={16} fontWeight={800} color={color}>{value}</Typography>
     </Box>
@@ -213,7 +214,7 @@ export function ClientFacturationFolder({ clientId, onChanged }: { clientId: num
         ) : (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {fiche.contrats.map(k => (
-              <Box key={k.id} sx={{ px: 1.5, py: 1, borderRadius: 2, border: '1px solid #E2E8F0', bgcolor: k.actif ? '#fff' : '#F8FAFC' }}>
+              <Box key={k.id} sx={{ px: 1.5, py: 1, borderRadius: 2, border: (t: Theme) => `1px solid ${t.palette.divider}`, bgcolor: k.actif ? '#fff' : '#F8FAFC' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography fontSize={12.5} fontWeight={700}>{TYPES[k.type].label}{k.designation ? ` — ${k.designation}` : ''}</Typography>
                   <Chip size="small" label={k.actif ? 'Actif' : 'Inactif'}

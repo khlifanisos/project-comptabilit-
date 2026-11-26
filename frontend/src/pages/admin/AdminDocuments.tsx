@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Box, Typography, Card, CardContent, TextField, InputAdornment,
@@ -196,7 +197,7 @@ export default function AdminDocuments() {
             <FolderOpenIcon sx={{ color: 'white', fontSize: 26 }} />
           </Box>
           <Box>
-            <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+            <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
               Documents clients
             </Typography>
             <Typography color="text.secondary" fontSize={14}>
@@ -355,7 +356,7 @@ export default function AdminDocuments() {
                     px: 1.5, py: 1, borderRadius: 2, cursor: 'pointer',
                     bgcolor: selectedKeys.has(doc.key) ? '#F0F7FF' : 'transparent',
                     '&:hover': { bgcolor: '#F5F9FF' },
-                    borderBottom: '1px solid #F0F4F8',
+                    borderBottom: (t: Theme) => `1px solid ${t.palette.divider}`,
                   }}>
                   <Checkbox
                     checked={selectedKeys.has(doc.key)}
@@ -393,7 +394,7 @@ export default function AdminDocuments() {
           )}
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1.5, gap: 1, borderTop: '1px solid #F0F4F8' }}>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1.5, gap: 1, borderTop: (t: Theme) => `1px solid ${t.palette.divider}` }}>
           <Typography fontSize={13} color="text.secondary" sx={{ flex: 1 }}>
             {selectedKeys.size} / {filtered.length} sélectionné(s)
           </Typography>

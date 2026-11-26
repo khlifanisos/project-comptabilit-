@@ -123,7 +123,7 @@ export default function Profile() {
 
   return (
     <Box className="fade-in">
-      <Typography variant="h5" fontWeight={800} color="#1a1a2e" mb={3}>Mon profil</Typography>
+      <Typography variant="h5" fontWeight={800} color="text.primary" mb={3}>Mon profil</Typography>
 
       {/* hidden file input */}
       <Box

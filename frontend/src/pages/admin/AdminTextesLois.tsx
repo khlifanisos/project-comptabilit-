@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Alert, Chip, Button, TextField,
@@ -192,7 +193,7 @@ export default function AdminTextesLois() {
           <GavelIcon sx={{ color: 'white', fontSize: 26 }} />
         </Box>
         <Box sx={{ flex: 1, minWidth: 200 }}>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Textes et lois
           </Typography>
           <Typography color="text.secondary" fontSize={14}>
@@ -227,7 +228,7 @@ export default function AdminTextesLois() {
                     '&:hover': { boxShadow: '0 10px 26px rgba(21,101,192,0.18)', transform: 'translateY(-3px)' },
                     '&:hover .doc-card-overlay': { opacity: 1 },
                   }}>
-                  <Box sx={{ position: 'relative', aspectRatio: '3 / 4', borderBottom: '1px solid #EEF1F6' }}>
+                  <Box sx={{ position: 'relative', aspectRatio: '3 / 4', borderBottom: (t: Theme) => `1px solid ${t.palette.divider}` }}>
                     <PdfThumbnail fileUrl={`/textes-lois/${doc.id}/fichier`} alt={doc.titre} />
 
                     <Box className="doc-card-overlay" sx={{
@@ -402,7 +403,7 @@ export default function AdminTextesLois() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           bgcolor: 'rgba(21,101,192,0.04)', borderBottom: '1px solid rgba(21,101,192,0.08)',
         }}>
-          <Typography fontWeight={700} fontSize={16} color="#1a1a2e">{viewTarget?.titre}</Typography>
+          <Typography fontWeight={700} fontSize={16} color="text.primary">{viewTarget?.titre}</Typography>
           <IconButton size="small" onClick={() => setViewTarget(null)} sx={{ color: '#64748B' }}>
             <CloseIcon fontSize="small" />
           </IconButton>

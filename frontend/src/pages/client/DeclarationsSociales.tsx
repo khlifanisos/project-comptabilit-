@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Button, Table, TableBody,
@@ -403,7 +404,7 @@ export default function DeclarationsSociales() {
         gap: 1.5, mb: 3,
       }}>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Déclarations sociales
           </Typography>
           <Typography color="text.secondary" fontSize={14}>CNSS, CIMR, AMO — charges du personnel</Typography>
@@ -597,7 +598,7 @@ export default function DeclarationsSociales() {
 
                 {/* Amounts */}
                 <Box sx={{ bgcolor: '#FAFBFF', borderRadius: 2, p: 2, mb: 2 }}>
-                  <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1.5}>
+                  <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1.5}>
                     Montants des cotisations
                   </Typography>
                   {[
@@ -606,7 +607,7 @@ export default function DeclarationsSociales() {
                     ['Part patronale',        `${fmt(viewDecl.part_patronale)} ${devise}`],
                     ['Part salariale',        `${fmt(viewDecl.part_salariale)} ${devise}`],
                   ].map(([label, value]) => (
-                    <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.6, borderBottom: '1px solid #F0F4F8' }}>
+                    <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.6, borderBottom: (t: Theme) => `1px solid ${t.palette.divider}` }}>
                       <Typography fontSize={12} color="#64748B">{label}</Typography>
                       <Typography fontSize={12} fontWeight={600}>{value}</Typography>
                     </Box>
@@ -669,7 +670,7 @@ export default function DeclarationsSociales() {
           <DialogContent sx={{ px: 3, py: 3, overflowY: 'auto' }}>
 
             {/* Type selector */}
-            <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1}>
+            <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1}>
               Type de déclaration
             </Typography>
             <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
@@ -689,7 +690,7 @@ export default function DeclarationsSociales() {
 
             {/* Client email */}
             <Box sx={{ bgcolor: '#F8FAFF', borderRadius: 2, p: 2, mb: 3 }}>
-              <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1.5}>
+              <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1.5}>
                 <PeopleIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
                 Informations client
               </Typography>
@@ -755,7 +756,7 @@ export default function DeclarationsSociales() {
 
             {/* Period & deadline */}
             <Box sx={{ bgcolor: '#F8FAFF', borderRadius: 2, p: 2, mb: 3 }}>
-              <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1.5}>
+              <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1.5}>
                 Période & date limite
               </Typography>
               <Grid container spacing={2}>
@@ -827,7 +828,7 @@ export default function DeclarationsSociales() {
 
             {/* Amounts */}
             <Box sx={{ bgcolor: '#F8FAFF', borderRadius: 2, p: 2, mb: 3 }}>
-              <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1.5}>
+              <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1.5}>
                 Montants des cotisations
               </Typography>
               <Grid container spacing={2}>
@@ -868,9 +869,9 @@ export default function DeclarationsSociales() {
                   { label: 'Part salariale', value: Number(form.part_salariale) || 0 },
                 ].map(({ label, value }) => (
                   <Grid item xs={4} key={label}>
-                    <Box sx={{ p: 1.5, bgcolor: 'white', borderRadius: 2, border: '1px solid #E2E8F0', textAlign: 'center' }}>
+                    <Box sx={{ p: 1.5, bgcolor: 'white', borderRadius: 2, border: (t: Theme) => `1px solid ${t.palette.divider}`, textAlign: 'center' }}>
                       <Typography fontSize={10} color="text.secondary">{label}</Typography>
-                      <Typography fontSize={14} fontWeight={700} color="#1A1A2E">{fmt(value)} {devise}</Typography>
+                      <Typography fontSize={14} fontWeight={700} color="text.primary">{fmt(value)} {devise}</Typography>
                     </Box>
                   </Grid>
                 ))}
@@ -885,7 +886,7 @@ export default function DeclarationsSociales() {
 
             {/* Status selector */}
             <Box sx={{ mb: 3 }}>
-              <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1}>
+              <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1}>
                 Statut de la déclaration
               </Typography>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
@@ -909,7 +910,7 @@ export default function DeclarationsSociales() {
 
             {/* File attachment */}
             <Box sx={{ mb: 3 }}>
-              <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1}>
+              <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1}>
                 Pièce jointe
               </Typography>
               <input ref={fileRef} type="file" accept=".pdf,image/*" hidden
@@ -950,7 +951,7 @@ export default function DeclarationsSociales() {
 
           </DialogContent>
 
-          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, borderTop: '1px solid #F0F4F8' }}>
+          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, borderTop: (t: Theme) => `1px solid ${t.palette.divider}` }}>
             {saving && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, borderRadius: 0 }} />}
             <Button onClick={closeForm} disabled={saving} sx={{ borderRadius: 2, fontWeight: 600 }}>
               Annuler
@@ -1073,7 +1074,7 @@ export default function DeclarationsSociales() {
 
         <DialogContent sx={{ p: 0 }}>
           {/* Select all */}
-          <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid #F0F4F8', bgcolor: '#FAFBFF',
+          <Box sx={{ px: 3, py: 1.5, borderBottom: (t: Theme) => `1px solid ${t.palette.divider}`, bgcolor: '#FAFBFF',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <FormControlLabel
               control={
@@ -1137,7 +1138,7 @@ export default function DeclarationsSociales() {
           </Box>
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, pt: 2, gap: 1, borderTop: '1px solid #F0F4F8' }}>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 2, gap: 1, borderTop: (t: Theme) => `1px solid ${t.palette.divider}` }}>
           {exportLoading && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0 }} />}
           <Button onClick={() => setExportOpen(false)} disabled={exportLoading}
             sx={{ borderRadius: 2, fontWeight: 600 }}>
@@ -1173,7 +1174,7 @@ export default function DeclarationsSociales() {
             <Grid container spacing={2}>
               {/* Type */}
               <Grid item xs={12}>
-                <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1}>Type</Typography>
+                <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1}>Type</Typography>
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
                   {(['CNSS', 'CIMR', 'AMO'] as const).map(t => (
                     <Box key={t} onClick={() => setEditForm(f => ({ ...f, type: t }))}
@@ -1235,7 +1236,7 @@ export default function DeclarationsSociales() {
 
               {/* Status */}
               <Grid item xs={12}>
-                <Typography fontSize={12} fontWeight={700} color="#1A1A2E" mb={1}>Statut</Typography>
+                <Typography fontSize={12} fontWeight={700} color="text.primary" mb={1}>Statut</Typography>
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
                   {([
                     { value: 'a_declarer', label: 'À déclarer', color: '#E65100', bg: '#FFF3E0' },
@@ -1265,7 +1266,7 @@ export default function DeclarationsSociales() {
             </Grid>
           </DialogContent>
 
-          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, borderTop: '1px solid #F0F4F8' }}>
+          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, borderTop: (t: Theme) => `1px solid ${t.palette.divider}` }}>
             {editSaving && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0 }} />}
             <Button onClick={() => setEditOpen(false)} disabled={editSaving}
               sx={{ borderRadius: 2, fontWeight: 600 }}>

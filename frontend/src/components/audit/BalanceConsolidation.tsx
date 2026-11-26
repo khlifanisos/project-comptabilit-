@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Grid, Button, IconButton,
@@ -182,7 +183,7 @@ export default function BalanceConsolidation({ clientId }: Props) {
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
           <AccountBalanceIcon sx={{ color: '#1565C0', fontSize: 21 }} />
-          <Typography fontWeight={700} fontSize={16} color="#1a1a2e">Consolidation des balances</Typography>
+          <Typography fontWeight={700} fontSize={16} color="text.primary">Consolidation des balances</Typography>
         </Box>
         <Typography fontSize={12.5} color="text.secondary" mb={2.5}>
           Importez la balance N et la balance N-1 pour générer automatiquement la comparaison compte par compte (équivalent de la macro de consolidation).
@@ -199,8 +200,8 @@ export default function BalanceConsolidation({ clientId }: Props) {
 
                 {info ? (
                   <Box sx={{
-                    border: '1px solid #E2E8F0', borderRadius: 3, p: 2,
-                    bgcolor: '#F8FAFC', height: '100%',
+                    border: (t: Theme) => `1px solid ${t.palette.divider}`, borderRadius: 3, p: 2,
+                    bgcolor: 'action.hover', height: '100%',
                   }}>
                     <Typography fontSize={12} fontWeight={700} color="#1565C0" mb={0.3}>{title}</Typography>
                     <Typography fontSize={10.5} color="text.secondary" mb={1}>{subtitle}</Typography>
@@ -230,14 +231,14 @@ export default function BalanceConsolidation({ clientId }: Props) {
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUpload(type, f) }}
                     sx={{
-                      border: '2px dashed #CBD5E1', borderRadius: 3, p: 2.2, textAlign: 'center',
-                      bgcolor: '#FAFAFA', cursor: busy ? 'default' : 'pointer', height: '100%',
+                      border: (t: Theme) => `2px dashed ${t.palette.divider}`, borderRadius: 3, p: 2.2, textAlign: 'center',
+                      bgcolor: 'action.hover', cursor: busy ? 'default' : 'pointer', height: '100%',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.6,
                       '&:hover': busy ? {} : { borderColor: '#1565C0', bgcolor: '#F0F7FF' },
                       transition: 'all 0.15s',
                     }}>
                     {busy ? <CircularProgress size={22} /> : <UploadFileIcon sx={{ fontSize: 26, color: '#94A3B8' }} />}
-                    <Typography fontSize={12.5} fontWeight={700} color="#1a1a2e">{title}</Typography>
+                    <Typography fontSize={12.5} fontWeight={700} color="text.primary">{title}</Typography>
                     <Typography fontSize={10.5} color="text.secondary">{subtitle}</Typography>
                     <Typography fontSize={10} color="#94A3B8">Glissez un fichier ou cliquez (.xlsx, .xls, .csv)</Typography>
                   </Box>
@@ -267,8 +268,8 @@ export default function BalanceConsolidation({ clientId }: Props) {
               </Button>
             </Box>
 
-            <Box sx={{ mb: 2.5, p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
-              <Typography fontSize={12.5} fontWeight={700} color="#1a1a2e" mb={1}>
+            <Box sx={{ mb: 2.5, p: 1.5, bgcolor: 'action.hover', border: (t: Theme) => `1px solid ${t.palette.divider}`, borderRadius: 2 }}>
+              <Typography fontSize={12.5} fontWeight={700} color="text.primary" mb={1}>
                 Sections d'audit <Typography component="span" fontSize={11.5} color="text.secondary" fontWeight={400}>— cliquez pour voir les comptes</Typography>
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -279,14 +280,14 @@ export default function BalanceConsolidation({ clientId }: Props) {
                       fontSize: 12, borderRadius: 2, border: '1px solid',
                       ...(s
                         ? { bgcolor: '#EEF4FA', color: '#1F4E78', borderColor: '#C9DAEA', '&:hover': { bgcolor: '#DCE8F3' } }
-                        : { bgcolor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0' }),
+                        : { bgcolor: 'action.hover', color: '#64748B', borderColor: 'divider' }),
                     }} />
                 ))}
               </Box>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography fontSize={13} fontWeight={700} color="#1a1a2e">
+              <Typography fontSize={13} fontWeight={700} color="text.primary">
                 {showAll ? 'Tous les comptes' : 'Écarts entre les deux balances'}
               </Typography>
               <Button size="small" onClick={() => setShowAll(s => !s)}
@@ -331,7 +332,7 @@ export default function BalanceConsolidation({ clientId }: Props) {
                         </TableRow>
                       )
                     })}
-                    <TableRow sx={{ '& td': { fontWeight: 700, fontSize: 12, bgcolor: '#F1F5F9', borderTop: '2px solid #CBD5E1', position: 'sticky', bottom: 0 } }}>
+                    <TableRow sx={{ '& td': { fontWeight: 700, fontSize: 12, bgcolor: (t: Theme) => t.palette.mode === 'dark' ? '#1E293B' : '#F1F5F9', borderTop: (t: Theme) => `2px solid ${t.palette.divider}`, position: 'sticky', bottom: 0 } }}>
                       <TableCell colSpan={2}>Total</TableCell>
                       <TableCell align="right">{formatNumber(rowsTotals.n_1)}</TableCell>
                       <TableCell align="right">{formatNumber(rowsTotals.n)}</TableCell>
@@ -393,7 +394,7 @@ export default function BalanceConsolidation({ clientId }: Props) {
                     <TableCell align="right" sx={{ fontSize: 12 }}>{formatPct(row.variation_pct)}</TableCell>
                   </TableRow>
                 ))}
-                <TableRow sx={{ '& td': { fontWeight: 700, fontSize: 12, bgcolor: '#F1F5F9', borderTop: '2px solid #CBD5E1' } }}>
+                <TableRow sx={{ '& td': { fontWeight: 700, fontSize: 12, bgcolor: (t: Theme) => t.palette.mode === 'dark' ? '#1E293B' : '#F1F5F9', borderTop: (t: Theme) => `2px solid ${t.palette.divider}` } }}>
                   <TableCell colSpan={2}>Total section</TableCell>
                   <TableCell align="right">{formatNumber(sectionTotals.n_1)}</TableCell>
                   <TableCell align="right">{formatNumber(sectionTotals.n)}</TableCell>

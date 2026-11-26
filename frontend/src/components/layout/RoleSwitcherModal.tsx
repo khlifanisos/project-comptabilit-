@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState } from 'react'
 import {
   Dialog, DialogTitle, DialogContent, Box, Typography,
@@ -178,7 +179,7 @@ export default function RoleSwitcherModal() {
                     display: 'flex', alignItems: 'center', gap: 1.5,
                     px: 1.5, py: 1, borderRadius: 2,
                     '&:hover': { bgcolor: '#F5F9FF' },
-                    borderBottom: '1px solid #F0F4F8',
+                    borderBottom: (t: Theme) => `1px solid ${t.palette.divider}`,
                   }}>
                     <Avatar src={c.avatar ?? undefined} sx={{ width: 36, height: 36, bgcolor: '#00ACC1', fontSize: 14, fontWeight: 700 }}>
                       {!c.avatar && c.nom.charAt(0).toUpperCase()}

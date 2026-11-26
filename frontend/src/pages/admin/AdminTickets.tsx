@@ -487,7 +487,7 @@ export default function AdminTickets() {
                             <Tooltip title={`${t.attachments.length} pièce(s) jointe(s)`}>
                               <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                                 label={t.attachments.length}
-                                sx={{ ml: 0.5, height: 22, fontSize: 11, bgcolor: '#F1F5F9', color: '#546E7A' }} />
+                                sx={{ ml: 0.5, height: 22, fontSize: 11, bgcolor: 'action.hover', color: '#546E7A' }} />
                             </Tooltip>
                           )}
 

@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Button, Table, TableBody,
@@ -168,7 +169,7 @@ export default function RelevesBancaires() {
         gap: 1.5, mb: 3,
       }}>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Relevés bancaires
           </Typography>
           <Typography color="text.secondary" fontSize={14}>Import et rapprochement des mouvements</Typography>
@@ -269,7 +270,7 @@ export default function RelevesBancaires() {
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>
           {/* Select all */}
-          <Box sx={{ display: 'flex', alignItems: 'center', px: 3, py: 1, bgcolor: '#F8FAFC' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', px: 3, py: 1, bgcolor: 'action.hover' }}>
             <Checkbox
               checked={allChecked}
               indeterminate={someChecked}
@@ -298,7 +299,7 @@ export default function RelevesBancaires() {
                   cursor: deleting ? 'default' : 'pointer',
                   bgcolor: deleteIds.has(row.id) ? '#FFF5F5' : 'transparent',
                   '&:hover': deleting ? {} : { bgcolor: deleteIds.has(row.id) ? '#FFE4E4' : '#F8FAFC' },
-                  borderBottom: '1px solid #F1F5F9',
+                  borderBottom: (t: Theme) => `1px solid ${t.palette.divider}`,
                 }}>
                 <Checkbox checked={deleteIds.has(row.id)} size="small" disabled={deleting}
                   onChange={() => toggleOne(row.id)} onClick={e => e.stopPropagation()}

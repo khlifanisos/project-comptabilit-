@@ -24,8 +24,9 @@ export default function WhatsAppButton() {
         rel="noopener"
         sx={{
           position: 'fixed',
-          bottom: { xs: 84, md: 92 },
-          right:  { xs: 16, md: 24 },
+          // safe-area insets keep it clear of the iPhone home bar / rounded corners
+          bottom: { xs: 'calc(84px + env(safe-area-inset-bottom))', md: 92 },
+          right:  { xs: 'calc(16px + env(safe-area-inset-right))', md: 24 },
           zIndex: 1200,
           bgcolor: '#25D366',
           color: 'white',

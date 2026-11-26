@@ -50,7 +50,7 @@ export default function PdfThumbnail({ fileUrl, alt }: PdfThumbnailProps) {
 
   if (error) {
     return (
-      <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#F5F7FB' }}>
+      <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
         <PictureAsPdfIcon sx={{ color: '#C62828', fontSize: 44 }} />
       </Box>
     )
@@ -58,7 +58,7 @@ export default function PdfThumbnail({ fileUrl, alt }: PdfThumbnailProps) {
 
   if (!src) {
     return (
-      <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#F5F7FB' }}>
+      <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover' }}>
         <CircularProgress size={22} thickness={4} />
       </Box>
     )
@@ -66,6 +66,6 @@ export default function PdfThumbnail({ fileUrl, alt }: PdfThumbnailProps) {
 
   return (
     <Box component="img" src={src} alt={alt}
-      sx={{ width: '100%', height: '100%', objectFit: 'contain', bgcolor: '#F5F7FB' }} />
+      sx={{ width: '100%', height: '100%', objectFit: 'contain', bgcolor: 'action.hover' }} />
   )
 }

@@ -88,7 +88,7 @@ export default function Messagerie() {
   }
 
   return (
-    <Box className="fade-in" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
+    <Box className="fade-in" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 120px)', minHeight: 420 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <Box sx={{ position: 'relative', flexShrink: 0 }}>
           <Box sx={{
@@ -106,7 +106,7 @@ export default function Messagerie() {
           }} />
         </Box>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Messagerie
           </Typography>
           <Typography color="text.secondary" fontSize={14}>
@@ -116,7 +116,7 @@ export default function Messagerie() {
       </Box>
 
       <Card sx={{ borderRadius: 3, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 1.5, md: 3 }, bgcolor: '#F7F9FC' }}>
+        <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 1.5, md: 3 }, bgcolor: (t) => t.palette.mode === 'dark' ? '#0F1726' : '#F7F9FC' }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
           ) : messages.length === 0 ? (
@@ -159,8 +159,8 @@ export default function Messagerie() {
                       px: m.attachment_path && m.attachment_type !== 'file' ? 0.6 : 1.8,
                       py: m.attachment_path && m.attachment_type !== 'file' ? 0.6 : 1.1,
                       borderRadius: 3,
-                      bgcolor: mine ? '#1565C0' : 'white',
-                      color: mine ? 'white' : '#1a1a2e',
+                      bgcolor: mine ? '#1565C0' : 'background.paper',
+                      color: mine ? 'white' : 'text.primary',
                       boxShadow: mine ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
                       borderTopRightRadius: mine ? 4 : 12,
                       borderTopLeftRadius: mine ? 12 : 4,

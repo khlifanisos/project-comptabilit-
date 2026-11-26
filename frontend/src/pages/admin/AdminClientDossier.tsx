@@ -192,7 +192,7 @@ export default function AdminClientDossier() {
           {!client?.avatar && (client?.nom.charAt(0).toUpperCase() ?? '?')}
         </Avatar>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             {client ? `Dossier de ${client.nom}` : 'Dossier client'}
           </Typography>
           <Typography color="text.secondary" fontSize={14}>

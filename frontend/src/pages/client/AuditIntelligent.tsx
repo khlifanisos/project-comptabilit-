@@ -219,8 +219,11 @@ export default function AuditIntelligent() {
 
   return (
     <Box className="fade-in">
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      {/* Header — stacks on phones so the title keeps its full width */}
+      <Box sx={{
+        display: 'flex', justifyContent: 'space-between', gap: 1.5, mb: 3,
+        flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' },
+      }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box sx={{
             width: 48, height: 48, borderRadius: 2.5,
@@ -230,7 +233,7 @@ export default function AuditIntelligent() {
             <SecurityIcon sx={{ color: 'white', fontSize: 26 }} />
           </Box>
           <Box>
-            <Typography variant="h5" fontWeight={800} color="#1a1a2e">Audit intelligent</Typography>
+            <Typography variant="h5" fontWeight={800} color="text.primary">Audit intelligent</Typography>
             <Typography color="text.secondary" fontSize={14}>Analyse automatique de votre comptabilité</Typography>
           </Box>
         </Box>
@@ -262,7 +265,7 @@ export default function AuditIntelligent() {
         <Grid item xs={12} md={4}>
           <Card sx={{ borderRadius: 3, height: '100%' }}>
             <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2.5 }}>
-              <Typography fontWeight={700} fontSize={16} color="#1a1a2e" alignSelf="flex-start">Score de fiabilité</Typography>
+              <Typography fontWeight={700} fontSize={16} color="text.primary" alignSelf="flex-start">Score de fiabilité</Typography>
               <ScoreGauge score={audit.score} niveau={audit.niveau} />
               <Box sx={{ width: '100%' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
@@ -284,7 +287,7 @@ export default function AuditIntelligent() {
         <Grid item xs={12} md={8}>
           <Card sx={{ borderRadius: 3, height: '100%' }}>
             <CardContent sx={{ p: 3 }}>
-              <Typography fontWeight={700} fontSize={16} color="#1a1a2e" mb={2.5}>Données analysées</Typography>
+              <Typography fontWeight={700} fontSize={16} color="text.primary" mb={2.5}>Données analysées</Typography>
               <Grid container spacing={1.5}>
                 {[
                   { label: 'Total ventes',     value: `${Number(audit.stats.total_ventes).toLocaleString('fr-FR')} ${devise}`, color: '#1565C0' },
@@ -321,7 +324,7 @@ export default function AuditIntelligent() {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <ErrorOutlineIcon sx={{ color: '#C62828', fontSize: 21 }} />
-                <Typography fontWeight={700} fontSize={16} color="#1a1a2e">Anomalies détectées</Typography>
+                <Typography fontWeight={700} fontSize={16} color="text.primary">Anomalies détectées</Typography>
                 <Box sx={{ ml: 'auto', display: 'flex', gap: 0.8 }}>
                   {audit.alerts_count > 0 && (
                     <Chip label={`${audit.alerts_count} critique(s)`} size="small"
@@ -381,7 +384,7 @@ export default function AuditIntelligent() {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <CheckCircleIcon sx={{ color: '#2E7D32', fontSize: 21 }} />
-                <Typography fontWeight={700} fontSize={16} color="#1a1a2e">Vérifications</Typography>
+                <Typography fontWeight={700} fontSize={16} color="text.primary">Vérifications</Typography>
                 <Box sx={{ ml: 'auto', display: 'flex', gap: 0.8 }}>
                   {okCount > 0 && (
                     <Chip label={`${okCount} ✓`} size="small"
@@ -430,7 +433,7 @@ export default function AuditIntelligent() {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: aiSummary ? 2 : 0, flexWrap: 'wrap' }}>
                 <AutoAwesomeIcon sx={{ color: '#7B1FA2', fontSize: 21 }} />
-                <Typography fontWeight={700} fontSize={16} color="#1a1a2e">Copilote IA</Typography>
+                <Typography fontWeight={700} fontSize={16} color="text.primary">Copilote IA</Typography>
                 {aiSummary?.cached && (
                   <Chip label="Résultat en cache (15 min)" size="small"
                     sx={{ bgcolor: '#F3E5F5', color: '#7B1FA2', fontWeight: 600, fontSize: 10.5 }} />
@@ -481,7 +484,7 @@ export default function AuditIntelligent() {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <LightbulbOutlinedIcon sx={{ color: '#E65100', fontSize: 21 }} />
-                <Typography fontWeight={700} fontSize={16} color="#1a1a2e">Recommandations</Typography>
+                <Typography fontWeight={700} fontSize={16} color="text.primary">Recommandations</Typography>
                 <Chip label={audit.recommandations.length} size="small"
                   sx={{ ml: 'auto', bgcolor: '#FFF3E0', color: '#E65100', fontWeight: 700 }} />
               </Box>

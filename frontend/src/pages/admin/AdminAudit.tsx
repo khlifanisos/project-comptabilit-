@@ -96,7 +96,11 @@ export default function AdminAudit() {
 
   return (
     <Box className="fade-in">
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      {/* Header — stacks on phones so the title and the client picker each get the full width */}
+      <Box sx={{
+        display: 'flex', justifyContent: 'space-between', gap: 1.5, mb: 3,
+        flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'stretch', md: 'center' },
+      }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box sx={{
             width: 48, height: 48, borderRadius: 2.5,
@@ -106,12 +110,12 @@ export default function AdminAudit() {
             <SecurityIcon sx={{ color: 'white', fontSize: 26 }} />
           </Box>
           <Box>
-            <Typography variant="h5" fontWeight={800} color="#1a1a2e">Audit des clients</Typography>
+            <Typography variant="h5" fontWeight={800} color="text.primary">Audit des clients</Typography>
             <Typography color="text.secondary" fontSize={14}>Vue d'ensemble de la santé comptable de tous les clients</Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <FormControl size="small" sx={{ minWidth: 240 }}>
+          <FormControl size="small" sx={{ minWidth: { xs: 0, sm: 240 }, flex: { xs: 1, md: 'none' } }}>
             <InputLabel>Client</InputLabel>
             <Select value={balanceClientId} label="Client"
               onChange={e => setBalanceClientId(e.target.value as number)}>
@@ -251,7 +255,7 @@ export default function AdminAudit() {
 
                               {/* Anomalies */}
                               <Grid item xs={12} md={4}>
-                                <Typography fontWeight={700} fontSize={13} mb={1.5} color="#1a1a2e">
+                                <Typography fontWeight={700} fontSize={13} mb={1.5} color="text.primary">
                                   Anomalies ({a.anomalies.length})
                                 </Typography>
                                 {a.anomalies.length === 0 ? (
@@ -285,7 +289,7 @@ export default function AdminAudit() {
 
                               {/* Vérifications */}
                               <Grid item xs={12} md={4}>
-                                <Typography fontWeight={700} fontSize={13} mb={1.5} color="#1a1a2e">
+                                <Typography fontWeight={700} fontSize={13} mb={1.5} color="text.primary">
                                   Vérifications ({a.verifications.filter(v => v.ok).length}/{a.verifications.length})
                                 </Typography>
                                 {a.verifications.length === 0 ? (
@@ -316,7 +320,7 @@ export default function AdminAudit() {
                               <Grid item xs={12} md={4}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 1.5 }}>
                                   <LightbulbOutlinedIcon sx={{ color: '#E65100', fontSize: 16 }} />
-                                  <Typography fontWeight={700} fontSize={13} color="#1a1a2e">
+                                  <Typography fontWeight={700} fontSize={13} color="text.primary">
                                     Recommandations ({a.recommandations.length})
                                   </Typography>
                                 </Box>

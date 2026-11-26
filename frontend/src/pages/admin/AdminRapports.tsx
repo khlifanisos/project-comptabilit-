@@ -96,7 +96,7 @@ export default function AdminRapports() {
           <BarChartIcon sx={{ color: 'white', fontSize: 26 }} />
         </Box>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e">Rapports</Typography>
+          <Typography variant="h5" fontWeight={800} color="text.primary">Rapports</Typography>
           <Typography color="text.secondary" fontSize={14}>Analyse globale et exports de la plateforme</Typography>
         </Box>
         <Chip label="2026" sx={{ ml: 'auto', bgcolor: '#1565C0', color: 'white', fontWeight: 700 }} />
@@ -131,7 +131,7 @@ export default function AdminRapports() {
         <Grid item xs={12} lg={8}>
           <Card sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
             <CardContent sx={{ p: 3 }}>
-              <Typography fontWeight={700} mb={2.5} color="#1a1a2e">{`Achats vs Ventes (${devise})`}</Typography>
+              <Typography fontWeight={700} mb={2.5} color="text.primary">{`Achats vs Ventes (${devise})`}</Typography>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={mensuelData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -151,7 +151,7 @@ export default function AdminRapports() {
         <Grid item xs={12} lg={4}>
           <Card sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', height: '100%' }}>
             <CardContent sx={{ p: 3 }}>
-              <Typography fontWeight={700} mb={2.5} color="#1a1a2e">Statut des factures</Typography>
+              <Typography fontWeight={700} mb={2.5} color="text.primary">Statut des factures</Typography>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={statutData} cx="50%" cy="50%" outerRadius={80} dataKey="value"
@@ -179,7 +179,7 @@ export default function AdminRapports() {
         <Grid item xs={12} lg={8}>
           <Card sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
             <CardContent sx={{ p: 3 }}>
-              <Typography fontWeight={700} mb={2.5} color="#1a1a2e">Nouveaux clients par mois</Typography>
+              <Typography fontWeight={700} mb={2.5} color="text.primary">Nouveaux clients par mois</Typography>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={clientsData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -200,7 +200,7 @@ export default function AdminRapports() {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <DownloadIcon sx={{ color: '#1565C0' }} />
-                <Typography fontWeight={700} color="#1a1a2e">Exporter les données</Typography>
+                <Typography fontWeight={700} color="text.primary">Exporter les données</Typography>
               </Box>
               <Stack spacing={1.2}>
                 {exportsList.map((e) => (

@@ -329,7 +329,9 @@ function ChatbotPanel({ storageKey }: { storageKey: string }) {
         <Box component="button" type="button" onClick={() => setOpen(true)} aria-label="Ouvrir l'assistant IA"
           sx={{
             all: 'unset', boxSizing: 'border-box', cursor: 'pointer',
-            position: 'fixed', bottom: { xs: 16, md: 24 }, right: { xs: 16, md: 24 }, zIndex: Z,
+            position: 'fixed', zIndex: Z,
+            bottom: { xs: 'calc(16px + env(safe-area-inset-bottom))', md: 24 },
+            right:  { xs: 'calc(16px + env(safe-area-inset-right))', md: 24 },
             display: 'flex', alignItems: 'center', gap: 1.2,
             height: 56, minWidth: 56, px: { xs: 0, sm: 2.2 }, justifyContent: 'center', borderRadius: 99,
             background: GRADIENT, color: 'white',
@@ -363,8 +365,10 @@ function ChatbotPanel({ storageKey }: { storageKey: string }) {
           left:   { xs: 0, sm: 'auto' },
           zIndex: Z,
           width:  { xs: '100%', sm: expanded ? 'min(760px, calc(100vw - 48px))' : 410 },
-          height: { xs: '92vh', sm: expanded ? 'calc(100vh - 48px)' : 640 },
-          maxHeight: { sm: 'calc(100vh - 48px)' },
+          // dvh = the visible height on mobile Safari/Chrome (vh ignores their toolbars)
+          height: { xs: '92dvh', sm: expanded ? 'calc(100dvh - 48px)' : 640 },
+          maxHeight: { sm: 'calc(100dvh - 48px)' },
+          pb: { xs: 'env(safe-area-inset-bottom)', sm: 0 },
           borderRadius: { xs: '24px 24px 0 0', sm: '24px' },
           border: '1px solid', borderColor: 'divider',
           boxShadow: '0 30px 80px rgba(2,8,23,0.35)',

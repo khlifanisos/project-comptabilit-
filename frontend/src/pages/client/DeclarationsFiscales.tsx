@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import React, { useState, useEffect } from 'react'
 import {
   Box, Typography, Card, CardContent, Button, Table, TableBody,
@@ -402,7 +403,7 @@ export default function DeclarationsFiscales() {
         gap: 1.5, mb: 3,
       }}>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Déclarations fiscales
           </Typography>
           <Typography color="text.secondary" fontSize={14}>TVA, IS, IR — suivi et archivage</Typography>
@@ -641,7 +642,7 @@ export default function DeclarationsFiscales() {
             return (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                 {rows2.map(([label, value]) => (
-                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', py: 1.5, borderBottom: '1px solid #F1F5F9' }}>
+                  <Box key={label} sx={{ display: 'flex', alignItems: 'center', py: 1.5, borderBottom: (t: Theme) => `1px solid ${t.palette.divider}` }}>
                     <Typography fontSize={13} color="text.secondary" sx={{ minWidth: 120, flexShrink: 0 }}>{label}</Typography>
                     {value}
                   </Box>

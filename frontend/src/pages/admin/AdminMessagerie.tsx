@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Box, Typography, Card, TextField, IconButton, Avatar,
@@ -154,7 +155,7 @@ export default function AdminMessagerie() {
   const showThread = !isMobile || activeId != null
 
   return (
-    <Box className="fade-in" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
+    <Box className="fade-in" sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 120px)', minHeight: 420 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <Box sx={{
           width: 48, height: 48, borderRadius: 2.5,
@@ -164,7 +165,7 @@ export default function AdminMessagerie() {
           <ForumIcon sx={{ color: 'white', fontSize: 26 }} />
         </Box>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Messagerie
           </Typography>
           <Typography color="text.secondary" fontSize={14}>
@@ -181,7 +182,7 @@ export default function AdminMessagerie() {
             borderRight: isMobile ? 'none' : '1px solid #EEF1F6',
             display: 'flex', flexDirection: 'column',
           }}>
-            <Box sx={{ p: 1.5, borderBottom: '1px solid #EEF1F6' }}>
+            <Box sx={{ p: 1.5, borderBottom: (t: Theme) => `1px solid ${t.palette.divider}` }}>
               <TextField
                 placeholder="Rechercher un client…"
                 value={search}
@@ -205,9 +206,9 @@ export default function AdminMessagerie() {
                     sx={{
                       display: 'flex', alignItems: 'center', gap: 1.2,
                       px: 1.5, py: 1.2, cursor: 'pointer',
-                      bgcolor: activeId === c.client_id ? '#E3F0FF' : 'transparent',
-                      borderBottom: '1px solid #F5F7FA',
-                      '&:hover': { bgcolor: activeId === c.client_id ? '#E3F0FF' : '#F7F9FC' },
+                      bgcolor: activeId === c.client_id ? 'rgba(21,101,192,0.12)' : 'transparent',
+                      borderBottom: '1px solid', borderBottomColor: 'divider',
+                      '&:hover': { bgcolor: activeId === c.client_id ? 'rgba(21,101,192,0.12)' : 'action.hover' },
                     }}>
                     <Box sx={{ position: 'relative', flexShrink: 0 }}>
                       <Avatar src={c.avatar ?? undefined} sx={{ width: 38, height: 38, bgcolor: '#1565C0', fontSize: 14, fontWeight: 700 }}>
@@ -253,7 +254,7 @@ export default function AdminMessagerie() {
               </Box>
             ) : (
               <>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, p: 1.5, borderBottom: '1px solid #EEF1F6' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, p: 1.5, borderBottom: (t: Theme) => `1px solid ${t.palette.divider}` }}>
                   {isMobile && (
                     <IconButton size="small" onClick={() => setActiveId(null)}>
                       <ArrowBackIcon fontSize="small" />
@@ -278,7 +279,7 @@ export default function AdminMessagerie() {
                   </Box>
                 </Box>
 
-                <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 1.5, md: 3 }, bgcolor: '#F7F9FC' }}>
+                <Box sx={{ flex: 1, overflowY: 'auto', p: { xs: 1.5, md: 3 }, bgcolor: (t) => t.palette.mode === 'dark' ? '#0F1726' : '#F7F9FC' }}>
                   {loadingThread ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
                   ) : messages.length === 0 ? (
@@ -315,8 +316,8 @@ export default function AdminMessagerie() {
                               px: m.attachment_path && m.attachment_type !== 'file' ? 0.6 : 1.8,
                               py: m.attachment_path && m.attachment_type !== 'file' ? 0.6 : 1.1,
                               borderRadius: 3,
-                              bgcolor: mine ? '#1565C0' : 'white',
-                              color: mine ? 'white' : '#1a1a2e',
+                              bgcolor: mine ? '#1565C0' : 'background.paper',
+                              color: mine ? 'white' : 'text.primary',
                               boxShadow: mine ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
                               borderTopRightRadius: mine ? 4 : 12,
                               borderTopLeftRadius: mine ? 12 : 4,

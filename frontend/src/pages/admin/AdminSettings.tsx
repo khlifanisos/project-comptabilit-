@@ -181,7 +181,7 @@ export default function AdminSettings() {
           <SettingsIcon sx={{ color: 'white', fontSize: 26 }} />
         </Box>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e">Paramètres</Typography>
+          <Typography variant="h5" fontWeight={800} color="text.primary">Paramètres</Typography>
           <Typography color="text.secondary" fontSize={14}>Gérer votre compte administrateur</Typography>
         </Box>
       </Box>

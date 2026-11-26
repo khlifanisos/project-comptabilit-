@@ -123,7 +123,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
 
   return (
     <Box sx={{
-      borderTop: '1px solid #EEF1F6', bgcolor: 'white',
+      borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper',
       '@keyframes recPulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.3 } },
     }}>
       <Box component="input" ref={fileRef} type="file" hidden onChange={handleFileChange} />
@@ -173,11 +173,13 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-              placeholder="Écrire un message…"
+              placeholder="Votre message…"
               fullWidth
               multiline
               maxRows={4}
               size="small"
+              // Take all the room left between the icons (it otherwise shrinks on narrow phones)
+              sx={{ flex: 1, minWidth: 0 }}
             />
             <Tooltip title="Message vocal">
               <IconButton onClick={startRecording}><MicIcon fontSize="small" /></IconButton>

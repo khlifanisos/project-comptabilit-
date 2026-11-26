@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: Props) {
   useEffect(() => { window.scrollTo({ top: 0 }) }, [pathname])
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default', transition: 'background-color 0.3s ease' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', bgcolor: 'background.default', transition: 'background-color 0.3s ease' }}>
       <SiteHeader overHero={overHero} />
 
       {meta && (

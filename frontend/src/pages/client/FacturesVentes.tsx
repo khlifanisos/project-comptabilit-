@@ -1,3 +1,4 @@
+import type { Theme } from '@mui/material/styles'
 import { useState, useEffect, useRef } from 'react'
 import {
   Box, Typography, Card, CardContent, Button, Table, TableBody,
@@ -435,7 +436,7 @@ export default function FacturesVentes() {
         gap: 1.5, mb: 3,
       }}>
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#1a1a2e" fontSize={{ xs: 17, md: 22 }}>
+          <Typography variant="h5" fontWeight={800} color="text.primary" fontSize={{ xs: 17, md: 22 }}>
             Factures de ventes
           </Typography>
           <Typography color="text.secondary" fontSize={14}>
@@ -640,7 +641,7 @@ export default function FacturesVentes() {
                     px: 1.5, py: 1, borderRadius: 2, cursor: 'pointer',
                     bgcolor: selectedIds.has(row.id) ? '#F0F7FF' : 'transparent',
                     '&:hover': { bgcolor: '#F5F9FF' },
-                    borderBottom: '1px solid #F0F4F8',
+                    borderBottom: (t: Theme) => `1px solid ${t.palette.divider}`,
                   }}>
                   <Checkbox
                     checked={selectedIds.has(row.id)}
@@ -667,7 +668,7 @@ export default function FacturesVentes() {
           </Box>
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, borderTop: '1px solid #F0F4F8', pt: 1.5 }}>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, borderTop: (t: Theme) => `1px solid ${t.palette.divider}`, pt: 1.5 }}>
           <Typography fontSize={13} color="text.secondary" sx={{ flex: 1 }}>
             {selectedIds.size} / {rows.length} sélectionnée(s)
           </Typography>
@@ -727,7 +728,7 @@ export default function FacturesVentes() {
                 onChange={e => setEditForm(f => ({ ...f, montant_ttc: e.target.value }))} />
             </Grid>
             <Grid item xs={12}>
-              <Box sx={{ borderRadius: 2, border: '1px solid #E2E8F0', px: 1.5, py: 1 }}>
+              <Box sx={{ borderRadius: 2, border: (t: Theme) => `1px solid ${t.palette.divider}`, px: 1.5, py: 1 }}>
                 <FormControlLabel
                   control={
                     <Checkbox
