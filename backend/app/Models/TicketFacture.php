@@ -72,11 +72,15 @@ class TicketFacture extends Model
         return str_starts_with($this->numero, self::PREFIXE_PREFACTURE);
     }
 
-    /** Next "{prefix}YY-000001" number, sequenced per calendar year. */
+    /**
+     * Next "{prefix}YY-000001" number, sequenced per calendar year. Called inside
+     * a transaction, the row lock makes concurrent callers wait for each other
+     * instead of both taking the same number (which the unique index would reject).
+     */
     public static function nextNumero(string $prefix = ''): string
     {
         $prefix .= now()->format('y') . '-';
-        $last = self::where('numero', 'like', $prefix . '%')->orderByDesc('numero')->value('numero');
+        $last = self::where('numero', 'like', $prefix . '%')->orderByDesc('numero')->lockForUpdate()->value('numero');
         $seq = $last ? ((int) substr($last, strlen($prefix))) + 1 : 1;
         return $prefix . str_pad((string) $seq, 6, '0', STR_PAD_LEFT);
     }

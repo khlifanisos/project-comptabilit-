@@ -81,7 +81,8 @@ class TicketFactureController extends Controller
                     'remise'      => 0,
                 ]],
                 'remise_acc_taux' => 0,
-                'timbre'          => 0,
+                // Droit de timbre on invoices: 1 TND, as on the contract préfactures (editable).
+                'timbre'          => 1,
                 'retenue_source'  => false,
             ],
         ]);
@@ -140,6 +141,23 @@ class TicketFactureController extends Controller
             'timbre'          => (float) ($validated['timbre'] ?? 1),
         ]);
 
+        // Payments already imputed (Facturation › Imputer un règlement) pin the invoice down:
+        // it can't go back to a draft nor drop below what the client already paid.
+        $regle = $ticket->facturation ? round((float) $ticket->facturation->reglements()->sum('montant'), 3) : 0.0;
+        if ($regle > 0) {
+            if ($data['statut'] === 'en_instance') {
+                return response()->json(['message' => 'Des règlements sont déjà imputés sur cette facture : elle ne peut plus repasser « En instance ».'], 422);
+            }
+            if ($data['net_facture'] < $regle - 0.0005) {
+                return response()->json(['message' => 'Le net de la facture (' . number_format($data['net_facture'], 3, ',', ' ')
+                    . ') serait inférieur aux règlements déjà imputés (' . number_format($regle, 3, ',', ' ') . ').'], 422);
+            }
+        }
+        // "Rég. Client" follows the imputed payments (as in Facturation), it is not ticked by hand.
+        if ($data['statut'] !== 'en_instance') {
+            $data['statut'] = $regle >= $data['net_facture'] - 0.0005 && $regle > 0 ? 'reg_client' : 'facture';
+        }
+
         $facture = DB::transaction(function () use ($ticket, $admin, $data) {
             if ($ticket->facturation) {
                 $ticket->facturation->update($data);
@@ -155,11 +173,12 @@ class TicketFactureController extends Controller
             // "En instance" is still a draft; anything further counts as billed.
             $ticket->update(['facture' => $data['statut'] !== 'en_instance']);
             return $facture;
-        });
+        }, 5); // retried on deadlock (numbering lock)
 
         return response()->json([
             'message' => 'Facture ' . $facture->numero . ' enregistrée.',
             'facture' => $facture->fresh(),
+            'regle'   => $regle,
         ]);
     }
 

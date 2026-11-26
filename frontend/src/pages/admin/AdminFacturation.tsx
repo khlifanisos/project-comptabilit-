@@ -108,7 +108,13 @@ const TYPES: Record<TypeContrat, { label: string; mois: number }> = {
 
 const fmt = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 const fmtDate = (d: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR') : '—')
-const today = () => new Date().toISOString().slice(0, 10)
+/** Today in the user's time zone (toISOString() is UTC: before 1 am in Tunis it gives yesterday). */
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+/** "1 000,500" / "1000.5" → 1000.5 (the amount fields accept spaces and a comma). */
+const parseMontant = (s: string) => Number(s.replace(/\s/g, '').replace(',', '.'))
 const errMsg = (err: any, fallback: string) => {
   const errors = err?.response?.data?.errors
   return errors ? String(Object.values(errors)[0]) : err?.response?.data?.message ?? fallback
@@ -214,7 +220,7 @@ export function ClientFacturationFolder({ clientId, onChanged }: { clientId: num
         ) : (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {fiche.contrats.map(k => (
-              <Box key={k.id} sx={{ px: 1.5, py: 1, borderRadius: 2, border: (t: Theme) => `1px solid ${t.palette.divider}`, bgcolor: k.actif ? '#fff' : '#F8FAFC' }}>
+              <Box key={k.id} sx={{ px: 1.5, py: 1, borderRadius: 2, border: (t: Theme) => `1px solid ${t.palette.divider}`, bgcolor: k.actif ? 'background.paper' : 'action.hover' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography fontSize={12.5} fontWeight={700}>{TYPES[k.type].label}{k.designation ? ` — ${k.designation}` : ''}</Typography>
                   <Chip size="small" label={k.actif ? 'Actif' : 'Inactif'}
@@ -470,10 +476,11 @@ export function ReglementDialog({ facture, onClose, onSaved }: { facture: Reglem
   const avecBanque = MODES_AVEC_BANQUE.includes(form.mode)
   const save = async () => {
     if (!facture) return
+    if (!(parseMontant(form.montant) > 0)) { toast.error('Saisissez un montant valide.'); return }
     setSaving(true)
     try {
       const { data } = await api.post(`/facturation/factures/${facture.id}/reglements`, {
-        ...form, montant: Number(form.montant.replace(',', '.')), banque: avecBanque ? form.banque : null,
+        ...form, montant: parseMontant(form.montant), banque: avecBanque ? form.banque : null,
       })
       toast.success(data.message)
       onSaved(data.facture)
@@ -776,11 +783,12 @@ function ContratDialog({ target, clients, onClose, onSaved }: {
     })
   }, [target])
 
-  const montant = Number(form.montant_ht.replace(',', '.')) || 0
+  const montant = parseMontant(form.montant_ht) || 0
   const mois = TYPES[form.type].mois
 
   const save = async () => {
     if (!target) return
+    if (montant <= 0) { toast.error('Saisissez le montant HT du contrat.'); return }
     setSaving(true)
     try {
       const payload = { ...form, montant_ht: montant, date_fin: form.date_fin || null }

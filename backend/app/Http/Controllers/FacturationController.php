@@ -96,7 +96,8 @@ class FacturationController extends Controller
             $rows = $rows->where('etat', $statut)->values();
         }
 
-        $factures = $rows->where('prefacture', false);
+        // Drafts (préfactures, "en instance") are not billed yet: same rule as the client balance.
+        $factures = $rows->whereNotIn('etat', ['prefacture', 'en_instance']);
         return response()->json([
             'factures' => $rows,
             'totaux'   => [
@@ -108,7 +109,9 @@ class FacturationController extends Controller
             ],
             'societes' => $this->visibleFactures($admin)->whereNotNull('societe')->where('societe', '!=', '')
                 ->distinct()->orderBy('societe')->pluck('societe')
-                ->merge(Contrat::whereNotNull('societe')->distinct()->pluck('societe'))
+                ->merge(Contrat::whereNotNull('societe')->where('societe', '!=', '')
+                    ->whereIn('client_id', $this->visibleClients($admin)->select('id'))
+                    ->distinct()->pluck('societe'))
                 ->unique()->sort()->values(),
         ]);
     }
@@ -175,14 +178,24 @@ class FacturationController extends Controller
             return response()->json(['message' => 'Cette facture est déjà validée.'], 422);
         }
 
-        DB::transaction(function () use ($facture) {
+        $facture = DB::transaction(function () use ($facture) {
+            // Re-read under lock: a double click must not burn two invoice numbers (gap in the sequence).
+            $facture = TicketFacture::lockForUpdate()->findOrFail($facture->id);
+            if (!$facture->isPrefacture() && $facture->statut !== 'en_instance') {
+                return null;
+            }
             $data = ['statut' => 'facture'];
             if ($facture->isPrefacture()) {
                 $data['numero'] = TicketFacture::nextNumero();
             }
             $facture->update($data);
             $facture->ticket?->update(['facture' => true]);
-        });
+            return $facture;
+        }, 5); // retried on deadlock (two validations at once)
+
+        if (!$facture) {
+            return response()->json(['message' => 'Cette facture est déjà validée.'], 422);
+        }
 
         return response()->json(['message' => "Facture {$facture->numero} validée.", 'facture' => $this->serialize($facture->fresh(['reglements', 'client', 'ticket', 'contrat']))]);
     }
@@ -226,6 +239,9 @@ class FacturationController extends Controller
         }
 
         $reste = round($facture->net_facture - $facture->reglements->sum('montant'), 3);
+        if ($reste <= 0.0005) {
+            return response()->json(['message' => 'Cette facture est déjà entièrement réglée.'], 422);
+        }
         $validated = $request->validate([
             'mode'           => 'required|in:' . implode(',', Reglement::MODES),
             'banque'         => 'nullable|string|max:100|required_if:mode,cheque,virement,traite',
@@ -238,10 +254,19 @@ class FacturationController extends Controller
             'banque.required_if' => 'La banque est obligatoire pour un chèque, un virement ou une traite.',
         ]);
 
-        DB::transaction(function () use ($facture, $admin, $validated) {
-            $facture->reglements()->create($validated + ['created_by' => $admin->id]);
-            $this->syncStatut($facture);
-        });
+        $ok = DB::transaction(function () use ($facture, $admin, $validated) {
+            // Two payments entered at once must not together exceed the net: re-check under lock.
+            $locked = TicketFacture::lockForUpdate()->findOrFail($facture->id);
+            if ($validated['montant'] > round($locked->net_facture - $locked->reglements()->sum('montant'), 3) + 0.0005) {
+                return false;
+            }
+            $locked->reglements()->create($validated + ['created_by' => $admin->id]);
+            $this->syncStatut($locked);
+            return true;
+        }, 5);
+        if (!$ok) {
+            return response()->json(['message' => 'Un autre règlement vient d\'être imputé : le montant dépasse maintenant le reste à payer.'], 422);
+        }
 
         return response()->json(['message' => 'Règlement imputé.', 'facture' => $this->serialize($facture->fresh(['reglements', 'client', 'ticket', 'contrat']))], 201);
     }
@@ -279,10 +304,15 @@ class FacturationController extends Controller
             $query->where('id', $request->input('contrat_id'));
         }
 
-        $crees = 0;
-        foreach ($query->get() as $contrat) {
-            $crees += $this->genererContrat($contrat, $jusquAu);
-        }
+        // Locking the contracts serialises two runs (double click, two tabs): the second
+        // one waits, then sees the periods the first one billed and skips them.
+        $crees = DB::transaction(function () use ($query, $jusquAu) {
+            $crees = 0;
+            foreach ($query->lockForUpdate()->get() as $contrat) {
+                $crees += $this->genererContrat($contrat, $jusquAu);
+            }
+            return $crees;
+        }, 5);
 
         return response()->json([
             'message' => $crees ? "{$crees} préfacture(s) générée(s)." : 'Aucune nouvelle préfacture à générer.',
@@ -414,7 +444,7 @@ class FacturationController extends Controller
     private function contratRules(): array
     {
         return [
-            'client_id'   => 'required|integer|exists:clients,id',
+            'client_id'   => ['required', 'integer', \Illuminate\Validation\Rule::exists('clients', 'id')->where('is_approved', true)],
             'societe'     => 'nullable|string|max:255',
             'designation' => 'nullable|string|max:255',
             'type'        => 'required|in:mensuelle,trimestrielle,semestrielle,annuelle,mission',
@@ -437,7 +467,25 @@ class FacturationController extends Controller
     {
         $this->superAdmin($request);
         $contrat = Contrat::findOrFail($id);
-        $contrat->update($request->validate($this->contratRules()));
+        $data = $request->validate($this->contratRules());
+
+        // Periods already billed are keyed on (contract, start of period): moving the client,
+        // the rhythm or the start date would shift every period and bill some twice.
+        if ($contrat->factures()->exists()) {
+            $changes = array_filter([
+                'client_id'  => (int) $data['client_id'] !== $contrat->client_id,
+                'type'       => $data['type'] !== $contrat->type,
+                'date_debut' => Carbon::parse($data['date_debut'])->toDateString() !== $contrat->date_debut->toDateString(),
+            ]);
+            if ($changes) {
+                return response()->json([
+                    'message' => 'Ce contrat a déjà des préfactures ou factures : le client, la rémunération et la date de début ne peuvent plus changer. Clôturez-le (date de fin) et créez un nouveau contrat.',
+                    'champs'  => array_keys($changes),
+                ], 422);
+            }
+        }
+
+        $contrat->update($data);
         return response()->json(['message' => 'Contrat mis à jour.', 'contrat' => $contrat->fresh()]);
     }
 

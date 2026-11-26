@@ -211,7 +211,9 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
       const { data } = await api.post(`/tickets/${ticketId}/facturation`, { ...form, lignes })
       toast.success(data.message)
       setExists(true)
-      setForm(f => f && { ...f, numero: data.facture.numero, lignes })
+      // The server sets « Rég. Client » / « Facturé » from the imputed payments.
+      setForm(f => f && { ...f, numero: data.facture.numero, statut: data.facture.statut, lignes })
+      if (data.regle !== undefined) setRegle(Number(data.regle))
       onSaved(data.facture)
       return data.facture as FactureSummary
     } catch (err: any) {
@@ -289,7 +291,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
         <Box sx={{ p: 1.25, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {/* ── Header panel ─────────────────────────────────────────────── */}
           <Box sx={{ bgcolor: C.panel, border: `1px solid ${C.border}`, borderRadius: 1, p: 1.25, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Box sx={{ flex: 1, minWidth: 320, display: 'grid', gridTemplateColumns: 'auto 1fr', alignItems: 'center', columnGap: 1.25, rowGap: 0.75 }}>
+            <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 320 }, display: 'grid', gridTemplateColumns: 'auto 1fr', alignItems: 'center', columnGap: 1.25, rowGap: 0.75 }}>
               <Typography sx={lbl(C.red)}>Date</Typography>
               <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
                 <InputBase type="date" value={form.date_facture} onChange={e => set('date_facture', e.target.value)} sx={{ ...fieldSx, width: 140 }} />
@@ -398,7 +400,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
 
           {/* ── Footer: TVA bases + totals ───────────────────────────────── */}
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Box sx={{ flex: 1, minWidth: 330, bgcolor: C.panel, border: `1px solid ${C.border}`, borderRadius: 1, p: 1.25 }}>
+            <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 330 }, bgcolor: C.panel, border: `1px solid ${C.border}`, borderRadius: 1, p: 1.25 }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 1.25, alignItems: 'center' }}>
                 <Typography sx={{ ...lbl(), fontSize: 11 }}>Base {TAUX_TVA}%</Typography>
                 <InputBase readOnly value={fmt(totals.base)} sx={amountBox} />
@@ -421,7 +423,7 @@ export default function TicketFactureDialog({ ticketId, onClose, onSaved }: Prop
               </Box>
             </Box>
 
-            <Box sx={{ flex: 1.2, minWidth: 380, bgcolor: C.panel, border: `1px solid ${C.border}`, borderRadius: 1, p: 1.25, display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 1.25, rowGap: 0.75, alignItems: 'center' }}>
+            <Box sx={{ flex: 1.2, minWidth: { xs: '100%', sm: 380 }, bgcolor: C.panel, border: `1px solid ${C.border}`, borderRadius: 1, p: 1.25, display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 1.25, rowGap: 0.75, alignItems: 'center' }}>
               <Typography sx={lbl()}>Mnt Brut</Typography>
               <InputBase readOnly value={fmt(totals.brut)} sx={amountBox} />
               <Typography sx={lbl()}>Mnt TVA</Typography>
